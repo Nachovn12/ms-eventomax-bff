@@ -4,7 +4,7 @@ Backend for Frontend de **EventoMax**, responsable de aplicar seguridad y enruta
 
 ## Tecnologías
 
-- Java 21
+- Java 25 LTS
 - Spring Boot
 - Spring Security
 - OAuth2 Resource Server
