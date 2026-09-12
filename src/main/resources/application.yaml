@@ -1,3 +1,13 @@
 spring:
   application:
     name: ms-eventomax-bff
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${ENTRA_ISSUER_URI}
+
+eventomax:
+  security:
+    jwt:
+      audience: ${ENTRA_AUDIENCE}
