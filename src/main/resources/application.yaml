@@ -11,3 +11,8 @@ eventomax:
   security:
     jwt:
       audience: ${ENTRA_AUDIENCE}
+  downstream:
+    productions-base-url: ${PRODUCTIONS_BASE_URL}
+    catalog-base-url: ${CATALOG_BASE_URL}
+    connect-timeout: ${DOWNSTREAM_CONNECT_TIMEOUT:3s}
+    read-timeout: ${DOWNSTREAM_READ_TIMEOUT:10s}

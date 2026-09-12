@@ -2,15 +2,17 @@
 
 Backend for Frontend de **EventoMax**, responsable de aplicar seguridad y enrutar solicitudes protegidas hacia los microservicios de dominio.
 
-## Estado actual — EMX-47
+## Estado actual — EMX-48
 
 Proyecto inicializado mediante Spring Initializr, con Maven Wrapper y configuración YAML. La validación JWT está implementada como OAuth2 Resource Server para los access tokens v2.0 de Microsoft Entra ID: firma, issuer, vigencia (`exp` y `nbf`) y audience.
 
 EMX-47 añade autorización por scope y App Roles de Entra ID, con respuestas estándar `401` y `403`.
 
+EMX-48 enruta los contratos aprobados de Productions y Catalog, preservando el Bearer token y el payload de transporte sin aplicar lógica de negocio.
+
 Todavía no están implementados:
 
-- Routing hacia microservicios (EMX-48).
+- Routing hacia Report, Audit y otros microservicios fuera de EP1.
 - Integración con AWS API Gateway.
 
 El BFF no contiene lógica de negocio, no tiene base de datos propia ni accede directamente a PostgreSQL.
@@ -38,7 +40,7 @@ El BFF formará parte del flujo seguro previsto de EventoMax:
 
 El API Gateway realizará una primera validación del JWT mediante JWT Authorizer.
 
-El BFF valida nuevamente el token mediante Spring Security, aunque API Gateway también lo valide. El routing a los servicios internos queda pendiente.
+El BFF valida nuevamente el token mediante Spring Security, aunque API Gateway también lo valide, y enruta las solicitudes autorizadas a Productions o Catalog.
 
 ## Responsabilidades previstas
 
@@ -98,7 +100,7 @@ Cada regla de dominio requiere **simultáneamente** `SCOPE_access_as_user` y al 
 | GET | `/api/report/**` | Admin |
 | GET | `/api/audit/**` | Admin, Auditor |
 
-Las demás combinaciones de método y ruta requieren únicamente autenticación válida. Esta matriz configura seguridad; todavía no implementa endpoints de dominio ni routing.
+Las demás combinaciones de método y ruta requieren únicamente autenticación válida. La matriz configura seguridad; solo los contratos de routing descritos abajo tienen controllers productivos. Una ruta autorizada sin contrato implementado devuelve `404` o `405`, sin llamar a un downstream.
 
 ### Respuestas 401 y 403
 
@@ -118,6 +120,50 @@ Antes de ejecutar la aplicación, define estas variables en el entorno del proce
 | `ENTRA_AUDIENCE` | `eventomax.security.jwt.audience` | Application (client) ID de `eventomax-api` para los access tokens v2.0. No es el scope delegado ni la URI `api://.../access_as_user`. |
 
 Ambas variables son obligatorias y no tienen valores por defecto. No se incluyen identificadores del entorno ni tokens en el código. Un archivo `.env` no se carga automáticamente.
+
+## Routing a Productions y Catalog
+
+`ProductionsRoutingController` y `CatalogRoutingController` declaran los contratos explícitos. Ambos delegan el transporte HTTP a `DomainRoutingClient`, que usa `RestClient`. `DomainRoutingConfiguration` configura destinos y cliente HTTP; aprovecha el `RestClient.Builder` de Boot cuando está disponible y utiliza el builder de Spring Framework en caso contrario, sin añadir un starter.
+
+| Servicio | Método | Contrato |
+| --- | --- | --- |
+| Productions | POST | `/api/productions` |
+| Productions | GET | `/api/productions/{id}` |
+| Productions | GET | `/api/productions` |
+| Productions | PUT | `/api/productions/{id}/status` |
+| Catalog | GET | `/api/catalog/services` |
+| Catalog | POST | `/api/catalog/services` |
+| Catalog | PUT | `/api/catalog/services/{id}` |
+
+El listado de productions conserva la query original, por ejemplo `?status=CONFIRMADO&from=2026-09-01&to=2026-09-30`, incluidos orden, parámetros repetidos y escapes. El path y la query ya codificados se envían mediante una `URI`, sin expandir plantillas ni recodificarlos.
+
+Se reenvían únicamente `Authorization`, `Content-Type` y `Accept` cuando existen. El token Bearer original se conserva y no se registra. No hay un header de correlación definido en el proyecto. `Host`, `Connection`, `Content-Length` y `Transfer-Encoding` no se copian: el cliente HTTP genera los headers de transporte que necesita.
+
+Los bodies se manejan como bytes opacos, sin DTOs de dominio ni validación de JSON, estados o inventario. Se deshabilita `FormContentFilter` para evitar que MVC consuma el body de formularios PUT antes del routing. Los payloads se almacenan en memoria durante el transporte; habrá que revisar límites/streaming si se incorporan cargas grandes. Las solicitudes HEAD implícitas de MVC no se reenvían, porque no forman parte de los contratos aprobados.
+
+El BFF conserva el status, body, `Content-Type` y `Location` del downstream. Se usa `RestClient.exchange(...)` para propagar también `4xx` y `5xx`, sin convertirlos en `200`; no se siguen redirecciones. Un fallo de conexión o timeout produce `502 Bad Gateway` sin cuerpo. No se aplican reintentos ni circuit breaker. El uso de `URI`, body opaco y `exchange` sigue la [documentación de RestClient](https://docs.spring.io/spring-framework/reference/integration/rest-clients.html).
+
+### Variables de downstream
+
+| Variable | Propiedad | Requisito / valor predeterminado |
+| --- | --- | --- |
+| `PRODUCTIONS_BASE_URL` | `eventomax.downstream.productions-base-url` | URL HTTP(S) de Productions; obligatoria, sin valor predeterminado. |
+| `CATALOG_BASE_URL` | `eventomax.downstream.catalog-base-url` | URL HTTP(S) de Catalog; obligatoria, sin valor predeterminado. |
+| `DOWNSTREAM_CONNECT_TIMEOUT` | `eventomax.downstream.connect-timeout` | Opcional; `3s`. |
+| `DOWNSTREAM_READ_TIMEOUT` | `eventomax.downstream.read-timeout` | Opcional; `10s`. |
+
+Las URLs base no deben incluir credenciales, query ni fragmento. A la base se añade el path completo del contrato; no se debe repetir `/api/productions` ni `/api/catalog/services` en la base.
+
+Ejemplo conceptual para servicios locales: sustituye los marcadores por los puertos donde estén escuchando tus servicios; no son puertos definitivos ni configuración cloud.
+
+```powershell
+$env:PRODUCTIONS_BASE_URL = "http://127.0.0.1:<puerto-local-productions>"
+$env:CATALOG_BASE_URL = "http://127.0.0.1:<puerto-local-catalog>"
+```
+
+Además deben estar definidas `ENTRA_ISSUER_URI` y `ENTRA_AUDIENCE` antes de ejecutar el BFF. Las pruebas sustituyen todos los destinos por servidores locales con puertos efímeros.
+
+## Credenciales
 
 No se deben almacenar en este repositorio:
 
@@ -166,11 +212,13 @@ Las pruebas unitarias cubren la coincidencia exacta de audience, múltiples audi
 
 También verifican el mapeo `ROLE_*`, múltiples roles, conservación de `SCOPE_*`, comportamiento estándar de claims de scopes, duplicados y sensibilidad a mayúsculas/minúsculas.
 
-Las pruebas de integración ejercitan el decoder y la cadena de seguridad reales con JWT sintéticos firmados mediante claves RSA efímeras. Un servidor HTTP en loopback, con puerto asignado dinámicamente, proporciona metadatos y JWKS exclusivamente de prueba; no se realizan llamadas a Internet ni a Microsoft Entra ID.
+Las pruebas de integración ejercitan el decoder, la cadena de seguridad y los controllers reales con JWT sintéticos firmados mediante claves RSA efímeras. `LocalJwtIssuer` proporciona metadatos/JWKS, y dos instancias de `LocalDownstreamServer` capturan las solicitudes a Productions y Catalog. Todos utilizan loopback y puertos efímeros; no se realizan llamadas a Internet ni a Microsoft Entra ID, ni se necesita Docker.
 
 Se conservan las pruebas de EMX-46: token válido, audience/issuer incorrectos, expiración, `nbf`, firma inválida, audience ausente, token malformado y flujo sin sesión. EMX-47 añade la matriz completa de los cuatro roles, scope ausente/incorrecto, rol ausente/incorrecto, respuestas `401`/`403` y límites de métodos/patrones de rutas.
 
-El controller que responde `200` en `/test/protected` y `/api/**` existe únicamente en `src/test/java`; permite comprobar la autorización sin implementar routing ni endpoints ficticios en producción.
+El mapping genérico de test `/api/**` fue eliminado. Solo se conserva `/test/protected` para las pruebas de autenticación. Las autorizaciones de Report/Audit se comprueban con `404` cuando se supera la seguridad, porque su routing no está implementado.
+
+Las pruebas de routing verifican los siete contratos, body/path/query/headers, estados `201`/`202`/`204`, errores downstream `400`/`401`/`403`/`404`/`409`/`500`, redirecciones y fallo de conexión `502`. Las pruebas de seguridad comprueban que una solicitud rechazada no llama al downstream. Los dumps de MockMvc están deshabilitados para no imprimir Bearer tokens.
 
 ## Proyecto académico
 
