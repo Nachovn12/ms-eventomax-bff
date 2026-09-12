@@ -2,16 +2,15 @@
 
 Backend for Frontend de **EventoMax**, responsable de aplicar seguridad y enrutar solicitudes protegidas hacia los microservicios de dominio.
 
-## Estado actual — EMX-46
+## Estado actual — EMX-47
 
 Proyecto inicializado mediante Spring Initializr, con Maven Wrapper y configuración YAML. La validación JWT está implementada como OAuth2 Resource Server para los access tokens v2.0 de Microsoft Entra ID: firma, issuer, vigencia (`exp` y `nbf`) y audience.
 
+EMX-47 añade autorización por scope y App Roles de Entra ID, con respuestas estándar `401` y `403`.
+
 Todavía no están implementados:
 
-- Mapping de roles/claims y autorización por rol (EMX-47).
-- Reglas de autorización por scopes.
-- Respuestas personalizadas `401` y `403` (EMX-15).
-- Routing hacia microservicios.
+- Routing hacia microservicios (EMX-48).
 - Integración con AWS API Gateway.
 
 El BFF no contiene lógica de negocio, no tiene base de datos propia ni accede directamente a PostgreSQL.
@@ -73,9 +72,41 @@ El BFF valida access tokens de la API `eventomax-api`. No utiliza Client Secret:
 
 El decoder usa `SupplierJwtDecoder` para diferir el descubrimiento y la carga de claves hasta la primera solicitud con Bearer token. El arranque no requiere conectarse a Entra ID; la validación de tokens sí necesita acceso a sus metadatos y claves públicas cuando no están en caché. Este diseño sigue la [documentación oficial de Spring Security](https://docs.spring.io/spring-security/reference/servlet/oauth2/resource-server/jwt.html).
 
-La cadena de seguridad permite `/actuator/health` y `/actuator/info` sin autenticación; el resto requiere un JWT válido. Permitir una ruta no expone el endpoint: se conserva la exposición predeterminada de Actuator, que incluye `health`.
+La cadena de seguridad permite `GET /actuator/health` y `GET /actuator/info` sin autenticación. Permitir una ruta no expone el endpoint: se conserva la exposición predeterminada de Actuator, que incluye `health`.
 
-La autenticación usa `Authorization: Bearer`, sin sesiones ni cookies de autenticación. CSRF y el logout de sesión están deshabilitados para este flujo. Se mantienen las respuestas estándar de Spring Security, sin conversores personalizados de authorities ni reglas por roles/scopes.
+La autenticación usa `Authorization: Bearer`, sin sesiones ni cookies de autenticación. CSRF y el logout de sesión están deshabilitados para este flujo. Las validaciones JWT de EMX-46 se conservan.
+
+### Scopes, roles y autorización
+
+`EntraJwtAuthoritiesConverter` combina dos conversores mediante `DelegatingJwtGrantedAuthoritiesConverter`:
+
+- El `JwtGrantedAuthoritiesConverter` estándar conserva la conversión de scopes: `scp: "access_as_user"` produce `SCOPE_access_as_user`.
+- Un segundo `JwtGrantedAuthoritiesConverter` lee `roles` y añade el prefijo `ROLE_`: `["Admin", "Productor"]` produce `ROLE_Admin` y `ROLE_Productor`, sin eliminar las authorities `SCOPE_*`.
+
+Los roles funcionales son `Admin`, `Productor`, `Organizador` y `Auditor`, con coincidencia exacta de mayúsculas/minúsculas. No existe una jerarquía implícita: `Admin` no obtiene permisos reservados a otros roles, como crear productions.
+
+Cada regla de dominio requiere **simultáneamente** `SCOPE_access_as_user` y al menos uno de los roles indicados, mediante `AuthorizationManagers.allOf(...)`:
+
+| Método | Ruta | Roles permitidos |
+| --- | --- | --- |
+| GET | `/api/productions/**` | Admin, Productor, Organizador |
+| POST | `/api/productions` | Productor, Organizador |
+| PUT | `/api/productions/{id}/status` | Admin, Productor |
+| GET | `/api/catalog/**` | Admin, Productor |
+| POST | `/api/catalog/**` | Admin |
+| PUT | `/api/catalog/**` | Admin |
+| GET | `/api/report/**` | Admin |
+| GET | `/api/audit/**` | Admin, Auditor |
+
+Las demás combinaciones de método y ruta requieren únicamente autenticación válida. Esta matriz configura seguridad; todavía no implementa endpoints de dominio ni routing.
+
+### Respuestas 401 y 403
+
+- Sin Bearer token o con JWT inválido: `401 Unauthorized`, mediante `BearerTokenAuthenticationEntryPoint`.
+- Con JWT válido pero sin `access_as_user` o sin rol suficiente: `403 Forbidden`, mediante `BearerTokenAccessDeniedHandler`.
+- Con JWT válido, scope requerido y rol permitido: la solicitud supera la autorización.
+
+Se configura explícitamente el comportamiento estándar, con cabecera `WWW-Authenticate` y sin cuerpos JSON personalizados. El handler estándar informa `insufficient_scope` también cuando falta un rol permitido.
 
 ### Configuración externalizada
 
@@ -133,9 +164,13 @@ Requisito: **JDK 25**, con `JAVA_HOME` apuntando al JDK. No se requiere instalar
 
 Las pruebas unitarias cubren la coincidencia exacta de audience, múltiples audiences, claims ausentes/vacíos y configuración de audience inválida.
 
+También verifican el mapeo `ROLE_*`, múltiples roles, conservación de `SCOPE_*`, comportamiento estándar de claims de scopes, duplicados y sensibilidad a mayúsculas/minúsculas.
+
 Las pruebas de integración ejercitan el decoder y la cadena de seguridad reales con JWT sintéticos firmados mediante claves RSA efímeras. Un servidor HTTP en loopback, con puerto asignado dinámicamente, proporciona metadatos y JWKS exclusivamente de prueba; no se realizan llamadas a Internet ni a Microsoft Entra ID.
 
-Se verifica la aceptación de un token válido y el rechazo de audience incorrecta, issuer incorrecto, token expirado, `nbf` futuro, firma inválida, audience ausente y token malformado. También se comprueban los endpoints públicos, la autenticación obligatoria y el flujo Bearer sin sesión. El endpoint `/test/protected` existe únicamente en el código de tests.
+Se conservan las pruebas de EMX-46: token válido, audience/issuer incorrectos, expiración, `nbf`, firma inválida, audience ausente, token malformado y flujo sin sesión. EMX-47 añade la matriz completa de los cuatro roles, scope ausente/incorrecto, rol ausente/incorrecto, respuestas `401`/`403` y límites de métodos/patrones de rutas.
+
+El controller que responde `200` en `/test/protected` y `/api/**` existe únicamente en `src/test/java`; permite comprobar la autorización sin implementar routing ni endpoints ficticios en producción.
 
 ## Proyecto académico
 

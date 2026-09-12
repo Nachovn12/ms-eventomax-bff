@@ -5,6 +5,7 @@ import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Date;
+import java.util.List;
 
 import com.nimbusds.jose.JOSEException;
 import com.nimbusds.jose.JOSEObjectType;
@@ -63,6 +64,10 @@ final class LocalJwtIssuer implements AutoCloseable {
 
 	String sign(JWTClaimsSet.Builder claims) throws JOSEException {
 		return sign(claims, this.signingKey);
+	}
+
+	JWTClaimsSet.Builder validClaims(String scopes, String... roles) {
+		return validClaims().claim("scp", scopes).claim("roles", List.of(roles));
 	}
 
 	String signWithUntrustedKey(JWTClaimsSet.Builder claims) throws JOSEException {
