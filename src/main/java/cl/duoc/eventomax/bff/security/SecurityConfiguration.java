@@ -42,6 +42,7 @@ public class SecurityConfiguration {
 				.logout(AbstractHttpConfigurer::disable)
 				.sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
 				.authorizeHttpRequests(authorize -> authorize
+						.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 						.requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/info").permitAll()
 						.requestMatchers(HttpMethod.GET, "/api/productions/**")
 								.access(scopeAndAnyRole(ADMIN, PRODUCER, ORGANIZER))

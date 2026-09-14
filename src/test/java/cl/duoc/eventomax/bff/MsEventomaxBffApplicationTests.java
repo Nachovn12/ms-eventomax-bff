@@ -166,6 +166,21 @@ class MsEventomaxBffApplicationTests {
 		this.mockMvc.perform(post("/logout")).andExpect(status().isUnauthorized());
 	}
 
+	@Test
+	void permitsCorsPreflightWithoutAuthentication() throws Exception {
+		this.mockMvc.perform(request(HttpMethod.OPTIONS, "/api/catalog")
+				.header(HttpHeaders.ORIGIN, "http://localhost:4200")
+				.header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET")
+				.header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "authorization,content-type"))
+				.andExpect(status().is2xxSuccessful());
+	}
+
+	@Test
+	void rejectsUnauthenticatedGetCatalog() throws Exception {
+		this.mockMvc.perform(get("/api/catalog"))
+				.andExpect(status().isUnauthorized());
+	}
+
 	private void assertRejected(String token) throws Exception {
 		this.mockMvc.perform(get("/test/protected").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
 				.andExpect(status().isUnauthorized())
