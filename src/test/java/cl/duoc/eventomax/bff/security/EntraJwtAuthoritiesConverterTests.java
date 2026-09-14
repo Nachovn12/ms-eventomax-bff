@@ -23,9 +23,9 @@ class EntraJwtAuthoritiesConverterTests {
 
 	@Test
 	void mapsMultipleRoles() {
-		Jwt jwt = token().claim("roles", List.of("Productor", "Organizador")).build();
+		Jwt jwt = token().claim("roles", List.of("Producer", "Organizer")).build();
 
-		assertThat(authorities(jwt)).containsExactlyInAnyOrder("ROLE_Productor", "ROLE_Organizador");
+		assertThat(authorities(jwt)).containsExactlyInAnyOrder("ROLE_Producer", "ROLE_Organizer");
 	}
 
 	@Test

@@ -175,36 +175,36 @@ class MsEventomaxBffApplicationTests {
 	@ParameterizedTest(name = "{0} {1} with {2} -> {3}")
 	@CsvSource(textBlock = """
 			GET,  /api/productions/42,        Admin,       200
-			GET,  /api/productions/42,        Productor,   200
-			GET,  /api/productions/42,        Organizador, 200
+			GET,  /api/productions/42,        Producer,   200
+			GET,  /api/productions/42,        Organizer, 200
 			GET,  /api/productions/42,        Auditor,     403
 			POST, /api/productions,           Admin,       403
-			POST, /api/productions,           Productor,   200
-			POST, /api/productions,           Organizador, 200
+			POST, /api/productions,           Producer,   200
+			POST, /api/productions,           Organizer, 200
 			POST, /api/productions,           Auditor,     403
 			PUT,  /api/productions/42/status, Admin,       200
-			PUT,  /api/productions/42/status, Productor,   200
-			PUT,  /api/productions/42/status, Organizador, 403
+			PUT,  /api/productions/42/status, Producer,   200
+			PUT,  /api/productions/42/status, Organizer, 403
 			PUT,  /api/productions/42/status, Auditor,     403
 			GET,  /api/catalog/services,      Admin,       200
-			GET,  /api/catalog/services,      Productor,   200
-			GET,  /api/catalog/services,      Organizador, 403
+			GET,  /api/catalog/services,      Producer,   200
+			GET,  /api/catalog/services,      Organizer, 403
 			GET,  /api/catalog/services,      Auditor,     403
 			POST, /api/catalog/services,      Admin,       200
-			POST, /api/catalog/services,      Productor,   403
-			POST, /api/catalog/services,      Organizador, 403
+			POST, /api/catalog/services,      Producer,   403
+			POST, /api/catalog/services,      Organizer, 403
 			POST, /api/catalog/services,      Auditor,     403
 			PUT,  /api/catalog/services/42,   Admin,       200
-			PUT,  /api/catalog/services/42,   Productor,   403
-			PUT,  /api/catalog/services/42,   Organizador, 403
+			PUT,  /api/catalog/services/42,   Producer,   403
+			PUT,  /api/catalog/services/42,   Organizer, 403
 			PUT,  /api/catalog/services/42,   Auditor,     403
 			GET,  /api/report/summary,        Admin,       404
-			GET,  /api/report/summary,        Productor,   403
-			GET,  /api/report/summary,        Organizador, 403
+			GET,  /api/report/summary,        Producer,   403
+			GET,  /api/report/summary,        Organizer, 403
 			GET,  /api/report/summary,        Auditor,     403
-			GET,  /api/audit/events,          Admin,       404
-			GET,  /api/audit/events,          Productor,   403
-			GET,  /api/audit/events,          Organizador, 403
+			GET,  /api/audit/events,          Admin,       403
+			GET,  /api/audit/events,          Producer,   403
+			GET,  /api/audit/events,          Organizer, 403
 			GET,  /api/audit/events,          Auditor,     404
 			""")
 	void enforcesRoleMatrix(String method, String path, String role, int expectedStatus) throws Exception {
@@ -261,7 +261,7 @@ class MsEventomaxBffApplicationTests {
 			GET, /api/productions, 200
 			GET, /api/catalog, 404
 			GET, /api/report, 404
-			GET, /api/audit, 404
+			GET, /api/audit, 403
 			GET, /api/productions/42/details, 404
 			PUT, /api/catalog/services/42/details, 404
 			""")
@@ -307,7 +307,7 @@ class MsEventomaxBffApplicationTests {
 
 	@Test
 	void acceptsAnyAllowedRoleAlongsideOtherRolesAndScopes() throws Exception {
-		String token = ISSUER.sign(ISSUER.validClaims("another_scope access_as_user", "Auditor", "Productor"));
+		String token = ISSUER.sign(ISSUER.validClaims("another_scope access_as_user", "Auditor", "Producer"));
 		this.mockMvc.perform(post("/api/productions").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
 				.andExpect(status().isOk());
 	}
@@ -328,11 +328,11 @@ class MsEventomaxBffApplicationTests {
 
 	@ParameterizedTest(name = "routes {0} {1} -> {3}")
 	@CsvSource(textBlock = """
-			POST, /api/productions, Organizador, 201
-			GET, /api/productions/42, Productor, 200
-			GET, /api/productions, Productor, 200
-			PUT, /api/productions/42/status, Productor, 202
-			GET, /api/catalog/services, Productor, 200
+			POST, /api/productions, Organizer, 201
+			GET, /api/productions/42, Producer, 200
+			GET, /api/productions, Producer, 200
+			PUT, /api/productions/42/status, Producer, 202
+			GET, /api/catalog/services, Producer, 200
 			POST, /api/catalog/services, Admin, 201
 			PUT, /api/catalog/services/service-42, Admin, 200
 			""")
@@ -381,7 +381,7 @@ class MsEventomaxBffApplicationTests {
 	void preservesRawQueryIncludingRepeatedParametersAndEncoding() throws Exception {
 		String query = "status=CONFIRMADO&from=2026-09-01&to=2026-09-30"
 				+ "&tag=a%2Bb&other=first&tag=a+b&empty=&flag&filter=%7B%22a%22%3A1%7D";
-		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Productor"));
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Producer"));
 		this.mockMvc.perform(get(URI.create("/api/productions?" + query))
 				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token)).andExpect(status().isOk());
 
@@ -392,7 +392,7 @@ class MsEventomaxBffApplicationTests {
 	@Test
 	void preservesEncodedPathWithoutDoubleEncoding() throws Exception {
 		String path = "/api/productions/evento-%C3%B1";
-		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Productor"));
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Producer"));
 		this.mockMvc.perform(get(URI.create(path)).header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
 				.andExpect(status().isOk());
 
@@ -404,7 +404,7 @@ class MsEventomaxBffApplicationTests {
 	void preservesDownstreamErrors(int downstreamStatus) throws Exception {
 		byte[] body = "{\"error\":\"respuesta del dominio\"}".getBytes(StandardCharsets.UTF_8);
 		PRODUCTIONS.respond(downstreamStatus, body, Map.of("Content-Type", "application/problem+json"));
-		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Organizador"));
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Organizer"));
 		this.mockMvc.perform(post("/api/productions").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
 				.andExpect(status().is(downstreamStatus))
 				.andExpect(content().bytes(body))
@@ -416,7 +416,7 @@ class MsEventomaxBffApplicationTests {
 	void doesNotFollowDownstreamRedirects() throws Exception {
 		String location = CATALOG.baseUrl() + "/must-not-receive-bearer";
 		PRODUCTIONS.respond(302, new byte[0], Map.of("Location", location));
-		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Productor"));
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Producer"));
 		this.mockMvc.perform(get("/api/productions/42").header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
 				.andExpect(status().isFound())
 				.andExpect(header().string(HttpHeaders.LOCATION, location));
@@ -438,7 +438,7 @@ class MsEventomaxBffApplicationTests {
 		PRODUCTIONS.respond(200, new byte[] { 1, 2, 3 }, Map.of(
 				"Content-Type", "application/octet-stream", "Connection", "close",
 				"Set-Cookie", "test-cookie=value", "X-Internal", "downstream-only"));
-		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Organizador"));
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Organizer"));
 		this.mockMvc.perform(post("/api/productions")
 				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
 				.header(HttpHeaders.HOST, "untrusted.example.test")
@@ -483,10 +483,10 @@ class MsEventomaxBffApplicationTests {
 
 	private static Stream<Arguments> domainRequests() {
 		return Stream.of(
-				Arguments.of("GET", "/api/productions/42", "Productor"),
-				Arguments.of("POST", "/api/productions", "Organizador"),
-				Arguments.of("PUT", "/api/productions/42/status", "Productor"),
-				Arguments.of("GET", "/api/catalog/services", "Productor"),
+				Arguments.of("GET", "/api/productions/42", "Producer"),
+				Arguments.of("POST", "/api/productions", "Organizer"),
+				Arguments.of("PUT", "/api/productions/42/status", "Producer"),
+				Arguments.of("GET", "/api/catalog/services", "Producer"),
 				Arguments.of("POST", "/api/catalog/services", "Admin"),
 				Arguments.of("PUT", "/api/catalog/services/42", "Admin"),
 				Arguments.of("GET", "/api/report/summary", "Admin"),

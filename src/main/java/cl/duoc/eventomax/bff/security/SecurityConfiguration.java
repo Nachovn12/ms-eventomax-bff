@@ -26,8 +26,8 @@ import org.springframework.util.Assert;
 public class SecurityConfiguration {
 
 	private static final String ADMIN = "Admin";
-	private static final String PRODUCTOR = "Productor";
-	private static final String ORGANIZADOR = "Organizador";
+	private static final String PRODUCER = "Producer";
+	private static final String ORGANIZER = "Organizer";
 	private static final String AUDITOR = "Auditor";
 
 	@Bean
@@ -44,13 +44,13 @@ public class SecurityConfiguration {
 				.authorizeHttpRequests(authorize -> authorize
 						.requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/info").permitAll()
 						.requestMatchers(HttpMethod.GET, "/api/productions/**")
-								.access(scopeAndAnyRole(ADMIN, PRODUCTOR, ORGANIZADOR))
+								.access(scopeAndAnyRole(ADMIN, PRODUCER, ORGANIZER))
 						.requestMatchers(HttpMethod.POST, "/api/productions")
-								.access(scopeAndAnyRole(PRODUCTOR, ORGANIZADOR))
+								.access(scopeAndAnyRole(PRODUCER, ORGANIZER))
 						.requestMatchers(HttpMethod.PUT, "/api/productions/{id}/status")
-								.access(scopeAndAnyRole(ADMIN, PRODUCTOR))
+								.access(scopeAndAnyRole(ADMIN, PRODUCER))
 						.requestMatchers(HttpMethod.GET, "/api/catalog/**")
-								.access(scopeAndAnyRole(ADMIN, PRODUCTOR))
+								.access(scopeAndAnyRole(ADMIN, PRODUCER))
 						.requestMatchers(HttpMethod.POST, "/api/catalog/**")
 								.access(scopeAndAnyRole(ADMIN))
 						.requestMatchers(HttpMethod.PUT, "/api/catalog/**")
@@ -58,7 +58,7 @@ public class SecurityConfiguration {
 						.requestMatchers(HttpMethod.GET, "/api/report/**")
 								.access(scopeAndAnyRole(ADMIN))
 						.requestMatchers(HttpMethod.GET, "/api/audit/**")
-								.access(scopeAndAnyRole(ADMIN, AUDITOR))
+								.access(scopeAndAnyRole(AUDITOR))
 						.anyRequest().authenticated())
 				.exceptionHandling(exceptions -> exceptions
 						.authenticationEntryPoint(entryPoint)
