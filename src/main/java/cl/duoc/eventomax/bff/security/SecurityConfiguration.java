@@ -26,8 +26,8 @@ import org.springframework.util.Assert;
 public class SecurityConfiguration {
 
 	private static final String ADMIN = "Admin";
-	private static final String PRODUCER = "Producer";
-	private static final String ORGANIZER = "Organizer";
+	private static final String PRODUCER = "Productor";
+	private static final String ORGANIZER = "Organizador";
 	private static final String AUDITOR = "Auditor";
 
 	@Bean
@@ -44,6 +44,7 @@ public class SecurityConfiguration {
 				.authorizeHttpRequests(authorize -> authorize
 						.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 						.requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/info").permitAll()
+						.requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
 						.requestMatchers(HttpMethod.GET, "/api/productions/**")
 								.access(scopeAndAnyRole(ADMIN, PRODUCER, ORGANIZER))
 						.requestMatchers(HttpMethod.POST, "/api/productions")
