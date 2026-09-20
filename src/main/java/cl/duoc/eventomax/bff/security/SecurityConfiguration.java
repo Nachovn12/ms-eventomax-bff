@@ -26,8 +26,8 @@ import org.springframework.util.Assert;
 public class SecurityConfiguration {
 
 	private static final String ADMIN = "Admin";
-	private static final String PRODUCER = "Producer";
-	private static final String ORGANIZER = "Organizer";
+	private static final String PRODUCER = "Productor";
+	private static final String ORGANIZER = "Organizador";
 	private static final String AUDITOR = "Auditor";
 
 	@Bean
@@ -59,7 +59,7 @@ public class SecurityConfiguration {
 						.requestMatchers(HttpMethod.GET, "/api/report/**")
 								.access(scopeAndAnyRole(ADMIN))
 						.requestMatchers(HttpMethod.GET, "/api/audit/**")
-								.access(scopeAndAnyRole(AUDITOR))
+								.access(scopeAndAnyRole(ADMIN, AUDITOR))
 						.anyRequest().authenticated())
 				.exceptionHandling(exceptions -> exceptions
 						.authenticationEntryPoint(entryPoint)
