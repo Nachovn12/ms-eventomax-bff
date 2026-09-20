@@ -186,6 +186,15 @@ Flujo de integración:
 
 `feature/* → Pull Request → develop → pruebas → Pull Request → main`
 
+### OpenAPI
+
+La documentación del contrato BFF se genera con Springdoc OpenAPI 3.1.1:
+
+- `/v3/api-docs`
+- `/swagger-ui.html`
+
+La documentación declara Bearer JWT como esquema de seguridad. Las rutas de negocio continúan protegidas por Spring Security; solo los recursos de documentación se exponen sin autenticación para facilitar la exploración del contrato.
+
 ## Ejecución local
 
 Requisito: **JDK 25**, con `JAVA_HOME` apuntando al JDK. No se requiere instalar Maven por separado; se utiliza el Wrapper incluido.
