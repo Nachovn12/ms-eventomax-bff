@@ -1,6 +1,10 @@
 spring:
   application:
     name: ms-eventomax-bff
+  mvc:
+    formcontent:
+      filter:
+        enabled: false
   security:
     oauth2:
       resourceserver:
