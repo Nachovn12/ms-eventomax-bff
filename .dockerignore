@@ -1,0 +1,9 @@
+.git
+.gitignore
+target
+.env
+.env.*
+!.env.example
+.idea
+.vscode
+*.iml

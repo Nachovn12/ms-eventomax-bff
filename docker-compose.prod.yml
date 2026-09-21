@@ -1,0 +1,20 @@
+services:
+  ms-eventomax-bff:
+    container_name: ms-eventomax-bff
+    build: .
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    environment:
+      ENTRA_ISSUER_URI: ${ENTRA_ISSUER_URI}
+      ENTRA_AUDIENCE: ${ENTRA_AUDIENCE}
+      PRODUCTIONS_BASE_URL: ${PRODUCTIONS_BASE_URL}
+      CATALOG_BASE_URL: ${CATALOG_BASE_URL}
+      DOWNSTREAM_CONNECT_TIMEOUT: ${DOWNSTREAM_CONNECT_TIMEOUT:-3s}
+      DOWNSTREAM_READ_TIMEOUT: ${DOWNSTREAM_READ_TIMEOUT:-10s}
+    networks:
+      - eventomax-net
+
+networks:
+  eventomax-net:
+    external: true
