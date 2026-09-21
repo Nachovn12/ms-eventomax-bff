@@ -1,0 +1,22 @@
+spring:
+  application:
+    name: ms-eventomax-bff
+  mvc:
+    formcontent:
+      filter:
+        enabled: false
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${ENTRA_ISSUER_URI}
+
+eventomax:
+  security:
+    jwt:
+      audience: ${ENTRA_AUDIENCE}
+  downstream:
+    productions-base-url: ${PRODUCTIONS_BASE_URL}
+    catalog-base-url: ${CATALOG_BASE_URL}
+    connect-timeout: ${DOWNSTREAM_CONNECT_TIMEOUT:3s}
+    read-timeout: ${DOWNSTREAM_READ_TIMEOUT:10s}
