@@ -537,6 +537,57 @@ class MsEventomaxBffApplicationTests {
 				.andExpect(status().isOk());
 	}
 
+	@Test
+	void rejectsMissingExpiration() throws Exception {
+		assertRejected(ISSUER.sign(ISSUER.validClaims().expirationTime(null)));
+	}
+
+	@ParameterizedTest
+	@MethodSource("malformedRoles")
+	void rejectsMalformedRoleClaimsWithoutServerError(Object roles) throws Exception {
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user").claim("roles", roles));
+		assertForbidden("POST", "/api/catalog/services", token);
+	}
+
+	static Stream<Arguments> malformedRoles() {
+		return Stream.of(Arguments.of("Admin"), Arguments.of(42),
+				Arguments.of(java.util.List.of("Admin", 42)), Arguments.of(Map.of("role", "Admin")));
+	}
+
+	@ParameterizedTest
+	@MethodSource("malformedScopes")
+	void rejectsMalformedScopeClaimsWithoutServerError(Object scope) throws Exception {
+		String token = ISSUER.sign(ISSUER.validClaims(null, "Admin").claim("scp", scope));
+		assertForbidden("GET", "/api/catalog/services", token);
+	}
+
+	static Stream<Arguments> malformedScopes() {
+		return Stream.of(Arguments.of(42), Arguments.of(java.util.List.of("access_as_user", 42)),
+				Arguments.of(Map.of("scope", "access_as_user")));
+	}
+
+	@Test
+	void preservesFormEncodedPutBody() throws Exception {
+		byte[] body = "name=evento+uno&name=evento%2Bdos&rate=10".getBytes(StandardCharsets.UTF_8);
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Admin"));
+		this.mockMvc.perform(request(HttpMethod.PUT, "/api/catalog/services/42")
+				.contentType("application/x-www-form-urlencoded").content(body)
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token)).andExpect(status().isOk());
+		assertThat(CATALOG.requests()).hasSize(1);
+		assertThat(CATALOG.requests().getFirst().body()).isEqualTo(body);
+	}
+
+	@Test
+	void preservesCatalogValidationError() throws Exception {
+		byte[] body = "{\"error\":\"invalid rate\"}".getBytes(StandardCharsets.UTF_8);
+		CATALOG.respond(400, body, Map.of("Content-Type", "application/json"));
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Admin"));
+		this.mockMvc.perform(post("/api/catalog/services")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(status().isBadRequest()).andExpect(content().bytes(body))
+				.andExpect(header().string(HttpHeaders.CONTENT_TYPE, "application/json"));
+	}
+
 	@RestController
 	static class TestEndpoint {
 

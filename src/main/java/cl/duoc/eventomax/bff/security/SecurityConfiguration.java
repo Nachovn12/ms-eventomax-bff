@@ -1,5 +1,7 @@
 package cl.duoc.eventomax.bff.security;
 
+import java.time.Instant;
+import java.util.Objects;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -12,6 +14,7 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtClaimValidator;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.SupplierJwtDecoder;
@@ -90,7 +93,8 @@ public class SecurityConfiguration {
 			@Value("${eventomax.security.jwt.audience}") String audience) {
 		Assert.hasText(issuer, "JWT issuer must not be blank");
 		var validator = new DelegatingOAuth2TokenValidator<>(
-				JwtValidators.createDefaultWithIssuer(issuer), new AudienceValidator(audience));
+				JwtValidators.createDefaultWithIssuer(issuer), new AudienceValidator(audience),
+				new JwtClaimValidator<Instant>("exp", Objects::nonNull));
 
 		// Preserve deferred discovery: public health checks do not require Entra ID.
 		return new SupplierJwtDecoder(() -> {

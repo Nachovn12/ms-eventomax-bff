@@ -67,10 +67,16 @@ class EntraJwtAuthoritiesConverterTests {
 	}
 
 	@Test
-	void preservesRoleCase() {
+	void rejectsNonCanonicalRoleCase() {
 		Jwt jwt = token().claim("roles", List.of("admin")).build();
 
-		assertThat(authorities(jwt)).containsExactly("ROLE_admin").doesNotContain("ROLE_Admin");
+		assertThat(authorities(jwt)).isEmpty();
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "Producer", "Organizer", "Unknown", "ROLE_Admin" })
+	void doesNotGrantLegacyOrUnknownRoles(String role) {
+		assertThat(authorities(token().claim("roles", List.of(role)).build())).isEmpty();
 	}
 
 	private List<String> authorities(Jwt jwt) {

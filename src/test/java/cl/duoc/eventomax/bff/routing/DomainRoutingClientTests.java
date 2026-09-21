@@ -44,4 +44,39 @@ class DomainRoutingClientTests {
 				new DomainRoutingClient(client, URI.create(value), URI.create("https://example.test")));
 	}
 
+	@ParameterizedTest
+	@ValueSource(booleans = { false, true })
+	void readTimeoutCoversDelayedHeadersAndBody(boolean sendHeadersFirst) throws Exception {
+		var server = com.sun.net.httpserver.HttpServer.create(new java.net.InetSocketAddress("127.0.0.1", 0), 0);
+		server.createContext("/", exchange -> {
+			try (exchange) {
+				if (sendHeadersFirst) {
+					exchange.sendResponseHeaders(200, 10);
+					exchange.getResponseBody().write(1);
+					exchange.getResponseBody().flush();
+				}
+				Thread.sleep(1500);
+				if (!sendHeadersFirst) exchange.sendResponseHeaders(200, -1);
+			}
+			catch (InterruptedException ex) { Thread.currentThread().interrupt(); }
+			catch (java.io.IOException ex) { /* The timed-out client closes the connection. */ }
+		});
+		server.start();
+		try {
+			var configuration = new DomainRoutingConfiguration();
+			try (var httpClient = configuration.domainHttpClient(Duration.ofMillis(500))) {
+				assertThat(httpClient.connectTimeout()).contains(Duration.ofMillis(500));
+				var factory = configuration.domainRequestFactory(httpClient, Duration.ofMillis(200));
+				var uri = URI.create("http://127.0.0.1:" + server.getAddress().getPort());
+				var client = new DomainRoutingClient(RestClient.builder().requestFactory(factory).build(), uri, uri);
+				long start = System.nanoTime();
+				var response = client.productions(HttpMethod.GET, new MockHttpServletRequest("GET", "/api/productions"));
+				assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
+				assertThat(response.getBody()).isNull();
+				assertThat(Duration.ofNanos(System.nanoTime() - start)).isLessThan(Duration.ofSeconds(1));
+			}
+		}
+		finally { server.stop(0); }
+	}
+
 }

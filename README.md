@@ -65,7 +65,7 @@ La arquitectura semestral contempla además:
 
 El BFF valida access tokens de la API `eventomax-api`. No utiliza Client Secret: verifica la firma con las claves públicas obtenidas mediante el descubrimiento del issuer de Microsoft Entra ID.
 
-`SecurityConfiguration` combina `JwtValidators.createDefaultWithIssuer(...)` con `AudienceValidator`; así conserva los validadores estándar y añade la comprobación explícita de `aud`. La audience esperada debe aparecer exactamente en el claim; una audience ausente o incorrecta se rechaza. Se conserva la tolerancia temporal estándar de Spring Security de 60 segundos.
+`SecurityConfiguration` combina `JwtValidators.createDefaultWithIssuer(...)` con `AudienceValidator` y un `JwtClaimValidator` que exige la presencia de `exp`; así conserva los validadores estándar y añade las comprobaciones explícitas de audience y expiración obligatoria. La audience esperada debe aparecer exactamente en el claim; una audience ausente o incorrecta se rechaza. Se conserva la tolerancia temporal estándar de Spring Security de 60 segundos.
 
 El decoder usa `SupplierJwtDecoder` para diferir el descubrimiento y la carga de claves hasta la primera solicitud con Bearer token. El arranque no requiere conectarse a Entra ID; la validación de tokens sí necesita acceso a sus metadatos y claves públicas cuando no están en caché. Este diseño sigue la [documentación oficial de Spring Security](https://docs.spring.io/spring-security/reference/servlet/oauth2/resource-server/jwt.html).
 
@@ -75,10 +75,12 @@ La autenticación usa `Authorization: Bearer`, sin sesiones ni cookies de autent
 
 ### Scopes, roles y autorización
 
-`EntraJwtAuthoritiesConverter` combina dos conversores mediante `DelegatingJwtGrantedAuthoritiesConverter`:
+`EntraJwtAuthoritiesConverter` conserva la conversión estándar de scopes y valida la estructura de los roles:
 
 - El `JwtGrantedAuthoritiesConverter` estándar conserva la conversión de scopes: `scp: "access_as_user"` produce `SCOPE_access_as_user`.
-- Un segundo `JwtGrantedAuthoritiesConverter` lee `roles` y añade el prefijo `ROLE_`: `["Admin", "Productor"]` produce `ROLE_Admin` y `ROLE_Productor`, sin eliminar las authorities `SCOPE_*`.
+- `roles` debe ser una colección formada únicamente por strings. Solo los roles canónicos generan authorities `ROLE_*`: `["Admin", "Productor"]` produce `ROLE_Admin` y `ROLE_Productor`.
+- Un claim malformado no concede sus authorities ni provoca errores 500. No se aceptan aliases `Producer`/`Organizer`, roles desconocidos ni diferencias de mayúsculas/minúsculas.
+- Se mantiene la precedencia estándar `scope` sobre `scp`; las colecciones de scopes también se comprueban antes de convertirlas.
 
 Los roles funcionales son `Admin`, `Productor`, `Organizador` y `Auditor`, con coincidencia exacta de mayúsculas/minúsculas. No existe una jerarquía implícita: `Admin` no obtiene permisos reservados a otros roles, como crear productions.
 
@@ -134,7 +136,7 @@ Ambas variables son obligatorias y no tienen valores por defecto. No se incluyen
 | Catalog | POST | `/api/catalog/services` |
 | Catalog | PUT | `/api/catalog/services/{id}` |
 
-El listado de productions conserva la query original, por ejemplo `?status=CONFIRMADO&from=2026-09-01&to=2026-09-30`, incluidos orden, parámetros repetidos y escapes. El path y la query ya codificados se envían mediante una `URI`, sin expandir plantillas ni recodificarlos.
+El listado de productions conserva la query original, por ejemplo `?status=CONFIRMADO&from=2026-09-01T00:00:00&to=2026-09-30T23:59:59`, incluidos orden, parámetros repetidos y escapes. El path y la query ya codificados se envían mediante una `URI`, sin expandir plantillas ni recodificarlos.
 
 Se reenvían únicamente `Authorization`, `Content-Type` y `Accept` cuando existen. El token Bearer original se conserva y no se registra. No hay un header de correlación definido en el proyecto. `Host`, `Connection`, `Content-Length` y `Transfer-Encoding` no se copian: el cliente HTTP genera los headers de transporte que necesita.
 
@@ -239,7 +241,7 @@ También verifican el mapeo `ROLE_*`, múltiples roles, conservación de `SCOPE_
 
 Las pruebas de integración ejercitan el decoder, la cadena de seguridad y los controllers reales con JWT sintéticos firmados mediante claves RSA efímeras. `LocalJwtIssuer` proporciona metadatos/JWKS, y dos instancias de `LocalDownstreamServer` capturan las solicitudes a Productions y Catalog. Todos utilizan loopback y puertos efímeros; no se realizan llamadas a Internet ni a Microsoft Entra ID, ni se necesita Docker.
 
-Las pruebas de routing verifican los siete contratos, body/path/query/headers, estados `201`/`202`/`204`, errores downstream `400`/`401`/`403`/`404`/`409`/`500`, redirecciones y fallo de conexión `502`. Las pruebas de seguridad comprueban que una solicitud rechazada no llama al downstream. Los dumps de MockMvc están deshabilitados para no imprimir Bearer tokens.
+Las pruebas de routing verifican los siete contratos, body/path/query/headers, estados `201`/`202`/`204`, errores downstream `400`/`401`/`403`/`404`/`409`/`500`, redirecciones, fallo de conexión `502` y timeout durante headers/body `502`. También cubren claims malformados, ausencia de `exp` y bodies de formulario PUT. Las pruebas de seguridad comprueban que una solicitud rechazada no llama al downstream. Los dumps de MockMvc están deshabilitados para no imprimir Bearer tokens.
 
 Las pruebas de OpenAPI runtime verifican que `/v3/api-docs` requiere JWT (`401` sin token, `200` con token válido) y que Swagger UI redirige correctamente bajo autenticación.
 
