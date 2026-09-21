@@ -2,18 +2,15 @@
 
 Backend for Frontend de **EventoMax**, responsable de aplicar seguridad y enrutar solicitudes protegidas hacia los microservicios de dominio.
 
-## Estado actual — EMX-48
+## Estado actual — EP1
 
-Proyecto inicializado mediante Spring Initializr, con Maven Wrapper y configuración YAML. La validación JWT está implementada como OAuth2 Resource Server para los access tokens v2.0 de Microsoft Entra ID: firma, issuer, vigencia (`exp` y `nbf`) y audience.
+Proyecto implementado con Spring Boot 4.1.1. La validación JWT está implementada como OAuth2 Resource Server para los access tokens v2.0 de Microsoft Entra ID: firma, issuer, vigencia (`exp` y `nbf`) y audience.
 
-EMX-47 añade autorización por scope y App Roles de Entra ID, con respuestas estándar `401` y `403`.
+El flujo completo EP1 está validado en cloud:
 
-EMX-48 enruta los contratos aprobados de Productions y Catalog, preservando el Bearer token y el payload de transporte sin aplicar lógica de negocio.
-
-Todavía no están implementados:
-
-- Routing hacia Report, Audit y otros microservicios fuera de EP1.
-- Integración con AWS API Gateway.
+```
+Angular + MSAL → Microsoft Entra ID → JWT → AWS API Gateway HTTP API JWT Authorizer → ALB → ms-eventomax-bff → Productions/Catalog
+```
 
 El BFF no contiene lógica de negocio, no tiene base de datos propia ni accede directamente a PostgreSQL.
 
@@ -25,24 +22,22 @@ El BFF no contiene lógica de negocio, no tiene base de datos propia ni accede d
 - Spring Security 7 (versión gestionada por Spring Boot)
 - OAuth2 Resource Server
 - Spring Boot Actuator
+- SpringDoc OpenAPI 3.1.1 (Swagger UI + Bearer JWT)
 - Maven Wrapper
 - YAML
-
-### Tecnología planificada
-
-- OpenAPI / Swagger
+- Docker (multi-stage build, usuario no-root)
 
 ## Arquitectura
 
-El BFF formará parte del flujo seguro previsto de EventoMax:
+El BFF forma parte del flujo seguro de EventoMax:
 
-`Angular + MSAL → Microsoft Entra ID → JWT → AWS API Gateway → ms-eventomax-bff → microservicio de dominio`
+`Angular + MSAL → Microsoft Entra ID → JWT → AWS API Gateway HTTP API JWT Authorizer → ALB → ms-eventomax-bff → microservicio de dominio`
 
-El API Gateway realizará una primera validación del JWT mediante JWT Authorizer.
+El API Gateway realiza una primera validación del JWT mediante JWT Authorizer.
 
 El BFF valida nuevamente el token mediante Spring Security, aunque API Gateway también lo valide, y enruta las solicitudes autorizadas a Productions o Catalog.
 
-## Responsabilidades previstas
+## Responsabilidades
 
 `ms-eventomax-bff` debe:
 
@@ -55,7 +50,7 @@ El BFF valida nuevamente el token mediante Spring Security, aunque API Gateway t
 
 ## Microservicios de dominio
 
-Durante EP1 el BFF se integrará inicialmente con:
+Durante EP1 el BFF se integra con:
 
 - `ms-eventomax-productions`
 - `ms-eventomax-catalog`
@@ -76,7 +71,7 @@ El decoder usa `SupplierJwtDecoder` para diferir el descubrimiento y la carga de
 
 La cadena de seguridad permite `GET /actuator/health` y `GET /actuator/info` sin autenticación. Permitir una ruta no expone el endpoint: se conserva la exposición predeterminada de Actuator, que incluye `health`.
 
-La autenticación usa `Authorization: Bearer`, sin sesiones ni cookies de autenticación. CSRF y el logout de sesión están deshabilitados para este flujo. Las validaciones JWT de EMX-46 se conservan.
+La autenticación usa `Authorization: Bearer`, sin sesiones ni cookies de autenticación. CSRF y el logout de sesión están deshabilitados para este flujo. Las validaciones JWT se conservan.
 
 ### Scopes, roles y autorización
 
@@ -109,6 +104,10 @@ Las demás combinaciones de método y ruta requieren únicamente autenticación 
 - Con JWT válido, scope requerido y rol permitido: la solicitud supera la autorización.
 
 Se configura explícitamente el comportamiento estándar, con cabecera `WWW-Authenticate` y sin cuerpos JSON personalizados. El handler estándar informa `insufficient_scope` también cuando falta un rol permitido.
+
+### OpenAPI / Swagger
+
+SpringDoc OpenAPI 3.1.1 está integrado con esquema de seguridad Bearer JWT (`@SecurityScheme`). Los endpoints de documentación (`/v3/api-docs`, `/swagger-ui.html`) están protegidos por Spring Security y requieren un JWT válido.
 
 ### Configuración externalizada
 
@@ -154,14 +153,40 @@ El BFF conserva el status, body, `Content-Type` y `Location` del downstream. Se 
 
 Las URLs base no deben incluir credenciales, query ni fragmento. A la base se añade el path completo del contrato; no se debe repetir `/api/productions` ni `/api/catalog/services` en la base.
 
-Ejemplo conceptual para servicios locales: sustituye los marcadores por los puertos donde estén escuchando tus servicios; no son puertos definitivos ni configuración cloud.
+## Despliegue cloud — EC2
 
-```powershell
-$env:PRODUCTIONS_BASE_URL = "http://127.0.0.1:<puerto-local-productions>"
-$env:CATALOG_BASE_URL = "http://127.0.0.1:<puerto-local-catalog>"
+El BFF se despliega en una instancia EC2 de AWS Academy usando Docker Compose.
+
+### Requisitos
+
+- Docker y Docker Compose instalados en la EC2.
+- Red Docker externa `eventomax-net` creada previamente:
+  ```bash
+  docker network create eventomax-net
+  ```
+- Los microservicios `ms-eventomax-productions` y `ms-eventomax-catalog` deben estar corriendo y conectados a `eventomax-net`.
+- Archivo `.env` con las variables reales (no versionado).
+
+### Despliegue
+
+```bash
+cp .env.example .env
+# Editar .env con los valores reales de Entra ID
+
+docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-Además deben estar definidas `ENTRA_ISSUER_URI` y `ENTRA_AUDIENCE` antes de ejecutar el BFF. Las pruebas sustituyen todos los destinos por servidores locales con puertos efímeros.
+### Configuración de producción
+
+- **Puerto:** host `8080` → container `8080` (el ALB accede al BFF por este puerto).
+- **Restart policy:** `unless-stopped` — el contenedor se reinicia automáticamente tras un reinicio de la EC2 o un crash, evitando el incidente donde el BFF quedaba `Exited` y el ALB devolvía `503`.
+- **Red:** `eventomax-net` (externa) — permite comunicación por nombre de servicio con Productions y Catalog.
+- **Health check:** El ALB verifica `/actuator/health` (accesible sin JWT). No se agrega `HEALTHCHECK` Docker porque la imagen runtime no incluye `curl`/`wget`.
+- **Sin DB:** El BFF no tiene base de datos propia ni accede a RDS.
+
+### Variables de entorno
+
+Copiar `.env.example` a `.env` y completar con valores reales. El archivo `.env` está excluido de Git por `.gitignore`.
 
 ## Credenciales
 
@@ -214,13 +239,11 @@ También verifican el mapeo `ROLE_*`, múltiples roles, conservación de `SCOPE_
 
 Las pruebas de integración ejercitan el decoder, la cadena de seguridad y los controllers reales con JWT sintéticos firmados mediante claves RSA efímeras. `LocalJwtIssuer` proporciona metadatos/JWKS, y dos instancias de `LocalDownstreamServer` capturan las solicitudes a Productions y Catalog. Todos utilizan loopback y puertos efímeros; no se realizan llamadas a Internet ni a Microsoft Entra ID, ni se necesita Docker.
 
-Se conservan las pruebas de EMX-46: token válido, audience/issuer incorrectos, expiración, `nbf`, firma inválida, audience ausente, token malformado y flujo sin sesión. EMX-47 añade la matriz completa de los cuatro roles, scope ausente/incorrecto, rol ausente/incorrecto, respuestas `401`/`403` y límites de métodos/patrones de rutas.
-
-El mapping genérico de test `/api/**` fue eliminado. Solo se conserva `/test/protected` para las pruebas de autenticación. Las autorizaciones de Report/Audit se comprueban con `404` cuando se supera la seguridad, porque su routing no está implementado.
-
 Las pruebas de routing verifican los siete contratos, body/path/query/headers, estados `201`/`202`/`204`, errores downstream `400`/`401`/`403`/`404`/`409`/`500`, redirecciones y fallo de conexión `502`. Las pruebas de seguridad comprueban que una solicitud rechazada no llama al downstream. Los dumps de MockMvc están deshabilitados para no imprimir Bearer tokens.
+
+Las pruebas de OpenAPI runtime verifican que `/v3/api-docs` requiere JWT (`401` sin token, `200` con token válido) y que Swagger UI redirige correctamente bajo autenticación.
 
 ## Proyecto académico
 
-**Asignatura:** DSY1107 – Desarrollo Cloud Native I  
+**Asignatura:** DSY1107 – Desarrollo Cloud Native I
 **Caso:** Caso 8 – EventoMax
