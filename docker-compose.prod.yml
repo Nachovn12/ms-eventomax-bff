@@ -1,15 +1,16 @@
 services:
   ms-eventomax-bff:
     container_name: ms-eventomax-bff
-    build: .
+    build:
+      context: .
     ports:
       - "8080:8080"
     restart: unless-stopped
     environment:
-      ENTRA_ISSUER_URI: ${ENTRA_ISSUER_URI}
-      ENTRA_AUDIENCE: ${ENTRA_AUDIENCE}
-      PRODUCTIONS_BASE_URL: ${PRODUCTIONS_BASE_URL}
-      CATALOG_BASE_URL: ${CATALOG_BASE_URL}
+      ENTRA_ISSUER_URI: ${ENTRA_ISSUER_URI:?ENTRA_ISSUER_URI is required}
+      ENTRA_AUDIENCE: ${ENTRA_AUDIENCE:?ENTRA_AUDIENCE is required}
+      PRODUCTIONS_BASE_URL: ${PRODUCTIONS_BASE_URL:?PRODUCTIONS_BASE_URL is required}
+      CATALOG_BASE_URL: ${CATALOG_BASE_URL:?CATALOG_BASE_URL is required}
       DOWNSTREAM_CONNECT_TIMEOUT: ${DOWNSTREAM_CONNECT_TIMEOUT:-3s}
       DOWNSTREAM_READ_TIMEOUT: ${DOWNSTREAM_READ_TIMEOUT:-10s}
     networks:
