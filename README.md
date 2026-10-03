@@ -197,7 +197,7 @@ Los microservicios de dominio (Productions, Catalog) **no** publican sus puertos
 - `http://ms-eventomax-productions:8080`
 - `http://ms-eventomax-catalog:8080`
 
-El servicio `ms-eventomax-notify` es consumidor interno de eventos (RabbitMQ) y no expone API pública; no pasa por el BFF.
+El servicio `ms-eventomax-notify` consume comandos/trabajos asíncronos mediante RabbitMQ y no expone API pública; no pasa por el BFF.
 
 El BFF no almacena Client Secret. El JWT se valida tanto en API Gateway (JWT Authorizer) como en Spring Security (Resource Server).
 
