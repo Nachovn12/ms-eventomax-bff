@@ -2,11 +2,11 @@
 
 Backend for Frontend de **EventoMax**, responsable de aplicar seguridad y enrutar solicitudes protegidas hacia los microservicios de dominio.
 
-## Estado actual — EP1
+## Estado actual
 
 Proyecto implementado con Spring Boot 4.1.1. La validación JWT está implementada como OAuth2 Resource Server para los access tokens v2.0 de Microsoft Entra ID: firma, issuer, vigencia (`exp` y `nbf`) y audience.
 
-El flujo completo EP1 está validado en cloud:
+El flujo completo está validado en cloud:
 
 ```
 Angular + MSAL → Microsoft Entra ID → JWT → AWS API Gateway HTTP API JWT Authorizer → ALB → ms-eventomax-bff → Productions/Catalog
@@ -50,7 +50,7 @@ El BFF valida nuevamente el token mediante Spring Security, aunque API Gateway t
 
 ## Microservicios de dominio
 
-Durante EP1 el BFF se integra con:
+El BFF se integra actualmente con:
 
 - `ms-eventomax-productions`
 - `ms-eventomax-catalog`
@@ -185,6 +185,23 @@ docker compose -f docker-compose.prod.yml up -d --build
 - **Red:** `eventomax-net` (externa) — permite comunicación por nombre de servicio con Productions y Catalog.
 - **Health check:** El ALB verifica `/actuator/health` (accesible sin JWT). No se agrega `HEALTHCHECK` Docker porque la imagen runtime no incluye `curl`/`wget`.
 - **Sin DB:** El BFF no tiene base de datos propia ni accede a RDS.
+
+### Por qué el BFF publica el puerto 8080
+
+El BFF es el único microservicio que necesita `ports: "8080:8080"` porque el ALB lo utiliza como target HTTP en el EC2. Esto **no** significa que Angular o el usuario final accedan directamente al BFF; la entrada funcional sigue siendo AWS API Gateway. En AWS, el Security Group del EC2 debe restringir el puerto 8080 al origen del ALB, sin abrirlo de forma indiscriminada a Internet.
+
+### Downstream interno
+
+Los microservicios de dominio (Productions, Catalog) **no** publican sus puertos al host EC2. El BFF los resuelve por nombre de servicio dentro de la red Docker `eventomax-net`:
+
+- `http://ms-eventomax-productions:8080`
+- `http://ms-eventomax-catalog:8080`
+
+El servicio `ms-eventomax-notify` consume comandos/trabajos asíncronos mediante RabbitMQ y no expone API pública; no pasa por el BFF.
+
+El BFF no almacena Client Secret. El JWT se valida tanto en API Gateway (JWT Authorizer) como en Spring Security (Resource Server).
+
+Report y Audit no están implementados como routing en este incremento.
 
 ### Variables de entorno
 
