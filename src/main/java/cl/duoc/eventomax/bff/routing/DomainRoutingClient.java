@@ -32,10 +32,6 @@ public class DomainRoutingClient {
 	private final String reportBaseUrl;
 	private final String auditBaseUrl;
 
-	public DomainRoutingClient(RestClient client, URI productionsBaseUrl, URI catalogBaseUrl) {
-		this(client, productionsBaseUrl, catalogBaseUrl, productionsBaseUrl, catalogBaseUrl);
-	}
-
 	public DomainRoutingClient(RestClient client, URI productionsBaseUrl, URI catalogBaseUrl,
 			URI reportBaseUrl, URI auditBaseUrl) {
 		this.client = client;
