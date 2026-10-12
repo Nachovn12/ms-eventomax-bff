@@ -61,8 +61,10 @@ public class SecurityConfiguration {
 								.access(scopeAndAnyRole(ADMIN))
 						.requestMatchers(HttpMethod.GET, "/api/report/**")
 								.access(scopeAndAnyRole(ADMIN))
+						.requestMatchers("/api/report/**").denyAll()
 						.requestMatchers(HttpMethod.GET, "/api/audit/**")
 								.access(scopeAndAnyRole(ADMIN, AUDITOR))
+						.requestMatchers("/api/audit/**").denyAll()
 						.anyRequest().authenticated())
 				.exceptionHandling(exceptions -> exceptions
 						.authenticationEntryPoint(entryPoint)

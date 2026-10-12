@@ -26,12 +26,21 @@ class DomainRoutingClientTests {
 		var configuration = new DomainRoutingConfiguration();
 		try (var httpClient = configuration.domainHttpClient(Duration.ofMillis(500))) {
 			var factory = configuration.domainRequestFactory(httpClient, Duration.ofSeconds(1));
-			var client = new DomainRoutingClient(RestClient.builder().requestFactory(factory).build(), unavailable, unavailable);
+			var client = new DomainRoutingClient(RestClient.builder().requestFactory(factory).build(),
+					unavailable, unavailable, unavailable, unavailable);
 			var request = new MockHttpServletRequest("GET", "/api/productions/42");
 			var response = client.productions(HttpMethod.GET, request);
 
 			assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
 			assertThat(response.getBody()).isNull();
+
+			var reportResponse = client.report(HttpMethod.GET, new MockHttpServletRequest("GET", "/api/report/kpis"));
+			assertThat(reportResponse.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
+			assertThat(reportResponse.getBody()).isNull();
+
+			var auditResponse = client.audit(HttpMethod.GET, new MockHttpServletRequest("GET", "/api/audit/timeline"));
+			assertThat(auditResponse.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
+			assertThat(auditResponse.getBody()).isNull();
 		}
 	}
 
@@ -42,6 +51,14 @@ class DomainRoutingClientTests {
 		var client = RestClient.create();
 		assertThatIllegalArgumentException().isThrownBy(() ->
 				new DomainRoutingClient(client, URI.create(value), URI.create("https://example.test")));
+		assertThatIllegalArgumentException().isThrownBy(() ->
+				new DomainRoutingClient(client, URI.create("https://example.test"), URI.create(value)));
+		assertThatIllegalArgumentException().isThrownBy(() ->
+				new DomainRoutingClient(client, URI.create("https://example.test"), URI.create("https://example.test"),
+						URI.create(value), URI.create("https://example.test")));
+		assertThatIllegalArgumentException().isThrownBy(() ->
+				new DomainRoutingClient(client, URI.create("https://example.test"), URI.create("https://example.test"),
+						URI.create("https://example.test"), URI.create(value)));
 	}
 
 	@ParameterizedTest

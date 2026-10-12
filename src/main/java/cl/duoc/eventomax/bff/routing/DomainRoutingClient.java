@@ -16,19 +16,33 @@ import org.springframework.web.client.RestClient;
 
 public class DomainRoutingClient {
 
+	public static final String TRACE_ID_HEADER = "X-Trace-Id";
+	public static final String CORRELATION_ID_HEADER = "X-Correlation-Id";
+
 	private static final List<String> REQUEST_HEADERS =
-			List.of(HttpHeaders.AUTHORIZATION, HttpHeaders.CONTENT_TYPE, HttpHeaders.ACCEPT);
+			List.of(HttpHeaders.AUTHORIZATION, HttpHeaders.CONTENT_TYPE, HttpHeaders.ACCEPT,
+					TRACE_ID_HEADER, CORRELATION_ID_HEADER);
 	private static final List<String> RESPONSE_HEADERS =
-			List.of(HttpHeaders.CONTENT_TYPE, HttpHeaders.LOCATION);
+			List.of(HttpHeaders.CONTENT_TYPE, HttpHeaders.LOCATION,
+					TRACE_ID_HEADER, CORRELATION_ID_HEADER);
 
 	private final RestClient client;
 	private final String productionsBaseUrl;
 	private final String catalogBaseUrl;
+	private final String reportBaseUrl;
+	private final String auditBaseUrl;
 
 	public DomainRoutingClient(RestClient client, URI productionsBaseUrl, URI catalogBaseUrl) {
+		this(client, productionsBaseUrl, catalogBaseUrl, productionsBaseUrl, catalogBaseUrl);
+	}
+
+	public DomainRoutingClient(RestClient client, URI productionsBaseUrl, URI catalogBaseUrl,
+			URI reportBaseUrl, URI auditBaseUrl) {
 		this.client = client;
 		this.productionsBaseUrl = baseUrl(productionsBaseUrl);
 		this.catalogBaseUrl = baseUrl(catalogBaseUrl);
+		this.reportBaseUrl = baseUrl(reportBaseUrl);
+		this.auditBaseUrl = baseUrl(auditBaseUrl);
 	}
 
 	ResponseEntity<byte[]> productions(HttpMethod method, HttpServletRequest request) throws IOException {
@@ -37,6 +51,14 @@ public class DomainRoutingClient {
 
 	ResponseEntity<byte[]> catalog(HttpMethod method, HttpServletRequest request) throws IOException {
 		return forward(this.catalogBaseUrl, method, request);
+	}
+
+	ResponseEntity<byte[]> report(HttpMethod method, HttpServletRequest request) throws IOException {
+		return forward(this.reportBaseUrl, method, request);
+	}
+
+	ResponseEntity<byte[]> audit(HttpMethod method, HttpServletRequest request) throws IOException {
+		return forward(this.auditBaseUrl, method, request);
 	}
 
 	private ResponseEntity<byte[]> forward(String baseUrl, HttpMethod method, HttpServletRequest incoming)
