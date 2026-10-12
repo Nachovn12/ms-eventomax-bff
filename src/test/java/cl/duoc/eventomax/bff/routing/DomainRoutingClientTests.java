@@ -26,12 +26,21 @@ class DomainRoutingClientTests {
 		var configuration = new DomainRoutingConfiguration();
 		try (var httpClient = configuration.domainHttpClient(Duration.ofMillis(500))) {
 			var factory = configuration.domainRequestFactory(httpClient, Duration.ofSeconds(1));
-			var client = new DomainRoutingClient(RestClient.builder().requestFactory(factory).build(), unavailable, unavailable);
+			var client = new DomainRoutingClient(RestClient.builder().requestFactory(factory).build(),
+					unavailable, unavailable, unavailable, unavailable);
 			var request = new MockHttpServletRequest("GET", "/api/productions/42");
 			var response = client.productions(HttpMethod.GET, request);
 
 			assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
 			assertThat(response.getBody()).isNull();
+
+			var reportResponse = client.report(HttpMethod.GET, new MockHttpServletRequest("GET", "/api/report/kpis"));
+			assertThat(reportResponse.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
+			assertThat(reportResponse.getBody()).isNull();
+
+			var auditResponse = client.audit(HttpMethod.GET, new MockHttpServletRequest("GET", "/api/audit/timeline"));
+			assertThat(auditResponse.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
+			assertThat(auditResponse.getBody()).isNull();
 		}
 	}
 
@@ -40,8 +49,15 @@ class DomainRoutingClientTests {
 			"https://example.test?target=other", "https://example.test#fragment" })
 	void rejectsInvalidDownstreamBaseUrls(String value) {
 		var client = RestClient.create();
+		URI valid = URI.create("https://example.test");
 		assertThatIllegalArgumentException().isThrownBy(() ->
-				new DomainRoutingClient(client, URI.create(value), URI.create("https://example.test")));
+				new DomainRoutingClient(client, URI.create(value), valid, valid, valid));
+		assertThatIllegalArgumentException().isThrownBy(() ->
+				new DomainRoutingClient(client, valid, URI.create(value), valid, valid));
+		assertThatIllegalArgumentException().isThrownBy(() ->
+				new DomainRoutingClient(client, valid, valid, URI.create(value), valid));
+		assertThatIllegalArgumentException().isThrownBy(() ->
+				new DomainRoutingClient(client, valid, valid, valid, URI.create(value)));
 	}
 
 	@ParameterizedTest
@@ -68,7 +84,8 @@ class DomainRoutingClientTests {
 				assertThat(httpClient.connectTimeout()).contains(Duration.ofMillis(500));
 				var factory = configuration.domainRequestFactory(httpClient, Duration.ofMillis(200));
 				var uri = URI.create("http://127.0.0.1:" + server.getAddress().getPort());
-				var client = new DomainRoutingClient(RestClient.builder().requestFactory(factory).build(), uri, uri);
+				var client = new DomainRoutingClient(RestClient.builder().requestFactory(factory).build(),
+						uri, uri, uri, uri);
 				long start = System.nanoTime();
 				var response = client.productions(HttpMethod.GET, new MockHttpServletRequest("GET", "/api/productions"));
 				assertThat(response.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
