@@ -222,6 +222,18 @@ class MsEventomaxBffApplicationTests {
 			PUT,  /api/catalog/services/42,   Productor,   403
 			PUT,  /api/catalog/services/42,   Organizador, 403
 			PUT,  /api/catalog/services/42,   Auditor,     403
+			GET,  /api/catalog/equipment,     Admin,       200
+			GET,  /api/catalog/equipment,     Productor,   200
+			GET,  /api/catalog/equipment,     Organizador, 403
+			GET,  /api/catalog/equipment,     Auditor,     403
+			POST, /api/catalog/equipment,     Admin,       200
+			POST, /api/catalog/equipment,     Productor,   403
+			POST, /api/catalog/equipment,     Organizador, 403
+			POST, /api/catalog/equipment,     Auditor,     403
+			GET,  /api/catalog/reservations/production/42, Admin, 200
+			GET,  /api/catalog/reservations/production/42, Productor, 200
+			GET,  /api/catalog/reservations/production/42, Organizador, 403
+			GET,  /api/catalog/reservations/production/42, Auditor, 403
 			GET,  /api/report/summary,        Admin,       404
 			GET,  /api/report/summary,        Productor,   403
 			GET,  /api/report/summary,        Organizador, 403
@@ -371,6 +383,9 @@ class MsEventomaxBffApplicationTests {
 			GET, /api/catalog/services, Productor, 200
 			POST, /api/catalog/services, Admin, 201
 			PUT, /api/catalog/services/service-42, Admin, 200
+			GET, /api/catalog/equipment, Productor, 200
+			POST, /api/catalog/equipment, Admin, 201
+			GET, /api/catalog/reservations/production/42, Productor, 200
 			GET, /api/report/kpis, Admin, 200
 			GET, /api/report/top-services, Admin, 501
 			GET, /api/audit/timeline, Auditor, 200
