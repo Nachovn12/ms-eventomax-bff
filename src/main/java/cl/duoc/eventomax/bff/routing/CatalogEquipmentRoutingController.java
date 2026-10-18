@@ -7,6 +7,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -33,6 +34,11 @@ public class CatalogEquipmentRoutingController {
 	@PostMapping
 	ResponseEntity<byte[]> create(HttpServletRequest request) throws IOException {
 		return this.client.catalog(HttpMethod.POST, request);
+	}
+
+	@PutMapping("/{id}")
+	ResponseEntity<byte[]> update(HttpServletRequest request) throws IOException {
+		return this.client.catalog(HttpMethod.PUT, request);
 	}
 
 }

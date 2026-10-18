@@ -230,6 +230,10 @@ class MsEventomaxBffApplicationTests {
 			POST, /api/catalog/equipment,     Productor,   403
 			POST, /api/catalog/equipment,     Organizador, 403
 			POST, /api/catalog/equipment,     Auditor,     403
+			PUT,  /api/catalog/equipment/42,   Admin,       200
+			PUT,  /api/catalog/equipment/42,   Productor,   403
+			PUT,  /api/catalog/equipment/42,   Organizador, 403
+			PUT,  /api/catalog/equipment/42,   Auditor,     403
 			GET,  /api/catalog/reservations/production/42, Admin, 200
 			GET,  /api/catalog/reservations/production/42, Productor, 200
 			GET,  /api/catalog/reservations/production/42, Organizador, 200
@@ -649,6 +653,95 @@ class MsEventomaxBffApplicationTests {
 				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
 				.andExpect(status().isBadRequest()).andExpect(content().bytes(body))
 				.andExpect(header().string(HttpHeaders.CONTENT_TYPE, "application/json"));
+	}
+
+	@Test
+	void adminCanForwardPutEquipmentPreservingHeadersBodyAndTraces() throws Exception {
+		String traceId = "trace-equip-123";
+		String correlationId = "corr-equip-456";
+		byte[] requestBody = "{\"name\":\"Foco LED 100W\",\"description\":\"Iluminacion\",\"active\":true,\"availableQty\":12}"
+				.getBytes(StandardCharsets.UTF_8);
+		byte[] responseBody = "{\"id\":42,\"name\":\"Foco LED 100W\",\"description\":\"Iluminacion\",\"active\":true,\"availableQty\":12,\"reservedQty\":0}"
+				.getBytes(StandardCharsets.UTF_8);
+
+		CATALOG.respond(200, responseBody, Map.of(
+				"Content-Type", "application/json",
+				"X-Trace-Id", traceId,
+				"X-Correlation-Id", correlationId));
+
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Admin"));
+		this.mockMvc.perform(request(HttpMethod.PUT, "/api/catalog/equipment/42")
+				.contentType("application/json")
+				.content(requestBody)
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+				.header("X-Trace-Id", traceId)
+				.header("X-Correlation-Id", correlationId))
+				.andExpect(status().isOk())
+				.andExpect(content().bytes(responseBody))
+				.andExpect(header().string(HttpHeaders.CONTENT_TYPE, "application/json"))
+				.andExpect(header().string("X-Trace-Id", traceId))
+				.andExpect(header().string("X-Correlation-Id", correlationId));
+
+		assertThat(CATALOG.requests()).hasSize(1);
+		var captured = CATALOG.requests().getFirst();
+		assertThat(captured.method()).isEqualTo("PUT");
+		assertThat(captured.path()).isEqualTo("/api/catalog/equipment/42");
+		assertThat(captured.headers().getFirst(HttpHeaders.AUTHORIZATION)).isEqualTo("Bearer " + token);
+		assertThat(captured.headers().getFirst("X-Trace-Id")).isEqualTo(traceId);
+		assertThat(captured.headers().getFirst("X-Correlation-Id")).isEqualTo(correlationId);
+		assertThat(captured.body()).isEqualTo(requestBody);
+	}
+
+	@Test
+	void preservesCatalogEquipmentErrorResponses() throws Exception {
+		byte[] errorBody400 = "{\"error\":\"El nombre del equipo es obligatorio\"}".getBytes(StandardCharsets.UTF_8);
+		CATALOG.respond(400, errorBody400, Map.of("Content-Type", "application/json"));
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Admin"));
+
+		this.mockMvc.perform(request(HttpMethod.PUT, "/api/catalog/equipment/42")
+				.contentType("application/json")
+				.content("{\"name\":\"\",\"active\":true}".getBytes(StandardCharsets.UTF_8))
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(status().isBadRequest())
+				.andExpect(content().bytes(errorBody400))
+				.andExpect(header().string(HttpHeaders.CONTENT_TYPE, "application/json"));
+
+		byte[] errorBody404 = "{\"error\":\"Equipo no encontrado\"}".getBytes(StandardCharsets.UTF_8);
+		CATALOG.respond(404, errorBody404, Map.of("Content-Type", "application/json"));
+
+		this.mockMvc.perform(request(HttpMethod.PUT, "/api/catalog/equipment/999")
+				.contentType("application/json")
+				.content("{\"name\":\"Inexistente\",\"active\":true}".getBytes(StandardCharsets.UTF_8))
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(status().isNotFound())
+				.andExpect(content().bytes(errorBody404));
+	}
+
+	@Test
+	void anonymousCannotPutEquipment() throws Exception {
+		this.mockMvc.perform(request(HttpMethod.PUT, "/api/catalog/equipment/42")
+				.contentType("application/json")
+				.content("{\"name\":\"Test\",\"active\":true}".getBytes(StandardCharsets.UTF_8)))
+				.andExpect(status().isUnauthorized());
+		assertThat(CATALOG.requests()).isEmpty();
+	}
+
+	@Test
+	void nonAdminCannotPutEquipment() throws Exception {
+		String producerToken = ISSUER.sign(ISSUER.validClaims("access_as_user", "Productor"));
+		this.mockMvc.perform(request(HttpMethod.PUT, "/api/catalog/equipment/42")
+				.contentType("application/json")
+				.content("{\"name\":\"Test\",\"active\":true}".getBytes(StandardCharsets.UTF_8))
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + producerToken))
+				.andExpect(status().isForbidden());
+
+		String adminWithoutScope = ISSUER.sign(ISSUER.validClaims(null, "Admin"));
+		this.mockMvc.perform(request(HttpMethod.PUT, "/api/catalog/equipment/42")
+				.contentType("application/json")
+				.content("{\"name\":\"Test\",\"active\":true}".getBytes(StandardCharsets.UTF_8))
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + adminWithoutScope))
+				.andExpect(status().isForbidden());
+		assertThat(CATALOG.requests()).isEmpty();
 	}
 
 	@Test
