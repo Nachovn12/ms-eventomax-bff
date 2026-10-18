@@ -53,6 +53,8 @@ public class SecurityConfiguration {
 								.access(scopeAndAnyRole(PRODUCER, ORGANIZER))
 						.requestMatchers(HttpMethod.PUT, "/api/productions/{id}/status")
 								.access(scopeAndAnyRole(ADMIN, PRODUCER))
+						.requestMatchers(HttpMethod.GET, "/api/catalog/reservations/production/{productionId}")
+								.access(scopeAndAnyRole(ADMIN, PRODUCER, ORGANIZER))
 						.requestMatchers(HttpMethod.GET, "/api/catalog/**")
 								.access(scopeAndAnyRole(ADMIN, PRODUCER))
 						.requestMatchers(HttpMethod.POST, "/api/catalog/**")

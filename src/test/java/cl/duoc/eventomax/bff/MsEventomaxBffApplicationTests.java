@@ -222,6 +222,22 @@ class MsEventomaxBffApplicationTests {
 			PUT,  /api/catalog/services/42,   Productor,   403
 			PUT,  /api/catalog/services/42,   Organizador, 403
 			PUT,  /api/catalog/services/42,   Auditor,     403
+			GET,  /api/catalog/equipment,     Admin,       200
+			GET,  /api/catalog/equipment,     Productor,   200
+			GET,  /api/catalog/equipment,     Organizador, 403
+			GET,  /api/catalog/equipment,     Auditor,     403
+			POST, /api/catalog/equipment,     Admin,       200
+			POST, /api/catalog/equipment,     Productor,   403
+			POST, /api/catalog/equipment,     Organizador, 403
+			POST, /api/catalog/equipment,     Auditor,     403
+			PUT,  /api/catalog/equipment/42,   Admin,       200
+			PUT,  /api/catalog/equipment/42,   Productor,   403
+			PUT,  /api/catalog/equipment/42,   Organizador, 403
+			PUT,  /api/catalog/equipment/42,   Auditor,     403
+			GET,  /api/catalog/reservations/production/42, Admin, 200
+			GET,  /api/catalog/reservations/production/42, Productor, 200
+			GET,  /api/catalog/reservations/production/42, Organizador, 200
+			GET,  /api/catalog/reservations/production/42, Auditor, 403
 			GET,  /api/report/summary,        Admin,       404
 			GET,  /api/report/summary,        Productor,   403
 			GET,  /api/report/summary,        Organizador, 403
@@ -251,7 +267,8 @@ class MsEventomaxBffApplicationTests {
 				.andExpect(status().is(expectedStatus));
 		if (expectedStatus == 200) {
 			result.andExpect(content().string("authenticated"));
-			assertThat(downstreamRequestCount()).isEqualTo(1);
+			int expectedDownstreams = (path.startsWith("/api/catalog/reservations/production/") && "Organizador".equals(role)) ? 2 : 1;
+			assertThat(downstreamRequestCount()).isEqualTo(expectedDownstreams);
 		}
 		else if (expectedStatus == 403) {
 			result.andExpect(header().string(HttpHeaders.WWW_AUTHENTICATE,
@@ -371,6 +388,9 @@ class MsEventomaxBffApplicationTests {
 			GET, /api/catalog/services, Productor, 200
 			POST, /api/catalog/services, Admin, 201
 			PUT, /api/catalog/services/service-42, Admin, 200
+			GET, /api/catalog/equipment, Productor, 200
+			POST, /api/catalog/equipment, Admin, 201
+			GET, /api/catalog/reservations/production/42, Productor, 200
 			GET, /api/report/kpis, Admin, 200
 			GET, /api/report/top-services, Admin, 501
 			GET, /api/audit/timeline, Auditor, 200
@@ -636,6 +656,95 @@ class MsEventomaxBffApplicationTests {
 	}
 
 	@Test
+	void adminCanForwardPutEquipmentPreservingHeadersBodyAndTraces() throws Exception {
+		String traceId = "trace-equip-123";
+		String correlationId = "corr-equip-456";
+		byte[] requestBody = "{\"name\":\"Foco LED 100W\",\"description\":\"Iluminacion\",\"active\":true,\"availableQty\":12}"
+				.getBytes(StandardCharsets.UTF_8);
+		byte[] responseBody = "{\"id\":42,\"name\":\"Foco LED 100W\",\"description\":\"Iluminacion\",\"active\":true,\"availableQty\":12,\"reservedQty\":0}"
+				.getBytes(StandardCharsets.UTF_8);
+
+		CATALOG.respond(200, responseBody, Map.of(
+				"Content-Type", "application/json",
+				"X-Trace-Id", traceId,
+				"X-Correlation-Id", correlationId));
+
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Admin"));
+		this.mockMvc.perform(request(HttpMethod.PUT, "/api/catalog/equipment/42")
+				.contentType("application/json")
+				.content(requestBody)
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+				.header("X-Trace-Id", traceId)
+				.header("X-Correlation-Id", correlationId))
+				.andExpect(status().isOk())
+				.andExpect(content().bytes(responseBody))
+				.andExpect(header().string(HttpHeaders.CONTENT_TYPE, "application/json"))
+				.andExpect(header().string("X-Trace-Id", traceId))
+				.andExpect(header().string("X-Correlation-Id", correlationId));
+
+		assertThat(CATALOG.requests()).hasSize(1);
+		var captured = CATALOG.requests().getFirst();
+		assertThat(captured.method()).isEqualTo("PUT");
+		assertThat(captured.path()).isEqualTo("/api/catalog/equipment/42");
+		assertThat(captured.headers().getFirst(HttpHeaders.AUTHORIZATION)).isEqualTo("Bearer " + token);
+		assertThat(captured.headers().getFirst("X-Trace-Id")).isEqualTo(traceId);
+		assertThat(captured.headers().getFirst("X-Correlation-Id")).isEqualTo(correlationId);
+		assertThat(captured.body()).isEqualTo(requestBody);
+	}
+
+	@Test
+	void preservesCatalogEquipmentErrorResponses() throws Exception {
+		byte[] errorBody400 = "{\"error\":\"El nombre del equipo es obligatorio\"}".getBytes(StandardCharsets.UTF_8);
+		CATALOG.respond(400, errorBody400, Map.of("Content-Type", "application/json"));
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Admin"));
+
+		this.mockMvc.perform(request(HttpMethod.PUT, "/api/catalog/equipment/42")
+				.contentType("application/json")
+				.content("{\"name\":\"\",\"active\":true}".getBytes(StandardCharsets.UTF_8))
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(status().isBadRequest())
+				.andExpect(content().bytes(errorBody400))
+				.andExpect(header().string(HttpHeaders.CONTENT_TYPE, "application/json"));
+
+		byte[] errorBody404 = "{\"error\":\"Equipo no encontrado\"}".getBytes(StandardCharsets.UTF_8);
+		CATALOG.respond(404, errorBody404, Map.of("Content-Type", "application/json"));
+
+		this.mockMvc.perform(request(HttpMethod.PUT, "/api/catalog/equipment/999")
+				.contentType("application/json")
+				.content("{\"name\":\"Inexistente\",\"active\":true}".getBytes(StandardCharsets.UTF_8))
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(status().isNotFound())
+				.andExpect(content().bytes(errorBody404));
+	}
+
+	@Test
+	void anonymousCannotPutEquipment() throws Exception {
+		this.mockMvc.perform(request(HttpMethod.PUT, "/api/catalog/equipment/42")
+				.contentType("application/json")
+				.content("{\"name\":\"Test\",\"active\":true}".getBytes(StandardCharsets.UTF_8)))
+				.andExpect(status().isUnauthorized());
+		assertThat(CATALOG.requests()).isEmpty();
+	}
+
+	@Test
+	void nonAdminCannotPutEquipment() throws Exception {
+		String producerToken = ISSUER.sign(ISSUER.validClaims("access_as_user", "Productor"));
+		this.mockMvc.perform(request(HttpMethod.PUT, "/api/catalog/equipment/42")
+				.contentType("application/json")
+				.content("{\"name\":\"Test\",\"active\":true}".getBytes(StandardCharsets.UTF_8))
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + producerToken))
+				.andExpect(status().isForbidden());
+
+		String adminWithoutScope = ISSUER.sign(ISSUER.validClaims(null, "Admin"));
+		this.mockMvc.perform(request(HttpMethod.PUT, "/api/catalog/equipment/42")
+				.contentType("application/json")
+				.content("{\"name\":\"Test\",\"active\":true}".getBytes(StandardCharsets.UTF_8))
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + adminWithoutScope))
+				.andExpect(status().isForbidden());
+		assertThat(CATALOG.requests()).isEmpty();
+	}
+
+	@Test
 	void propagatesTraceAndCorrelationHeaders() throws Exception {
 		String traceId = "trace-emx96-test-123";
 		String correlationId = "corr-emx96-test-456";
@@ -808,6 +917,94 @@ class MsEventomaxBffApplicationTests {
 				.andExpect(status().isInternalServerError())
 				.andExpect(content().bytes(errorBody))
 				.andExpect(header().string(HttpHeaders.CONTENT_TYPE, "application/json"));
+	}
+
+	@Test
+	void organizerCanAccessOwnProductionReservations() throws Exception {
+		PRODUCTIONS.respond(200, "{\"id\":42,\"organizerId\":\"org-alpha\"}".getBytes(StandardCharsets.UTF_8),
+				Map.of("Content-Type", "application/json"));
+		byte[] reservationsJson = "[{\"reservationId\":1,\"equipmentId\":10,\"quantity\":2,\"status\":\"RESERVED\"}]"
+				.getBytes(StandardCharsets.UTF_8);
+		CATALOG.respond(200, reservationsJson, Map.of("Content-Type", "application/json"));
+
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Organizador")
+				.claim("tid", "tenant-alpha").claim("oid", "org-alpha"));
+
+		this.mockMvc.perform(get("/api/catalog/reservations/production/42")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(status().isOk())
+				.andExpect(content().bytes(reservationsJson));
+
+		assertThat(PRODUCTIONS.requests()).hasSize(1);
+		assertThat(PRODUCTIONS.requests().get(0).path()).isEqualTo("/api/productions/42");
+		assertThat(CATALOG.requests()).hasSize(1);
+		assertThat(CATALOG.requests().get(0).path()).isEqualTo("/api/catalog/reservations/production/42");
+	}
+
+	@Test
+	void organizerDeniedAccessToOtherOrganizerProductionReservations() throws Exception {
+		PRODUCTIONS.respond(403, "{\"message\":\"Forbidden\"}".getBytes(StandardCharsets.UTF_8),
+				Map.of("Content-Type", "application/json"));
+
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Organizador")
+				.claim("tid", "tenant-alpha").claim("oid", "org-alpha"));
+
+		this.mockMvc.perform(get("/api/catalog/reservations/production/99")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(status().isForbidden());
+
+		assertThat(PRODUCTIONS.requests()).hasSize(1);
+		assertThat(PRODUCTIONS.requests().get(0).path()).isEqualTo("/api/productions/99");
+		assertThat(CATALOG.requests()).isEmpty();
+	}
+
+	@Test
+	void organizerGets404WhenProductionDoesNotExist() throws Exception {
+		PRODUCTIONS.respond(404, "{\"message\":\"Not Found\"}".getBytes(StandardCharsets.UTF_8),
+				Map.of("Content-Type", "application/json"));
+
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Organizador"));
+
+		this.mockMvc.perform(get("/api/catalog/reservations/production/999")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(status().isNotFound());
+
+		assertThat(CATALOG.requests()).isEmpty();
+	}
+
+	@Test
+	void adminAndProducerBypassOwnershipCheck() throws Exception {
+		byte[] reservationsJson = "[{\"reservationId\":2}]".getBytes(StandardCharsets.UTF_8);
+		CATALOG.respond(200, reservationsJson, Map.of("Content-Type", "application/json"));
+
+		String adminToken = ISSUER.sign(ISSUER.validClaims("access_as_user", "Admin"));
+		this.mockMvc.perform(get("/api/catalog/reservations/production/55")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken))
+				.andExpect(status().isOk())
+				.andExpect(content().bytes(reservationsJson));
+
+		assertThat(PRODUCTIONS.requests()).isEmpty();
+
+		String producerToken = ISSUER.sign(ISSUER.validClaims("access_as_user", "Productor"));
+		this.mockMvc.perform(get("/api/catalog/reservations/production/55")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + producerToken))
+				.andExpect(status().isOk());
+
+		assertThat(PRODUCTIONS.requests()).isEmpty();
+	}
+
+	@Test
+	void anonymousCannotAccessReservations() throws Exception {
+		this.mockMvc.perform(get("/api/catalog/reservations/production/42"))
+				.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void auditorCannotAccessReservations() throws Exception {
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Auditor"));
+		this.mockMvc.perform(get("/api/catalog/reservations/production/42")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(status().isForbidden());
 	}
 
 	@RestController
