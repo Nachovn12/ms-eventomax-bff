@@ -232,7 +232,7 @@ class MsEventomaxBffApplicationTests {
 			POST, /api/catalog/equipment,     Auditor,     403
 			GET,  /api/catalog/reservations/production/42, Admin, 200
 			GET,  /api/catalog/reservations/production/42, Productor, 200
-			GET,  /api/catalog/reservations/production/42, Organizador, 403
+			GET,  /api/catalog/reservations/production/42, Organizador, 200
 			GET,  /api/catalog/reservations/production/42, Auditor, 403
 			GET,  /api/report/summary,        Admin,       404
 			GET,  /api/report/summary,        Productor,   403
@@ -263,7 +263,8 @@ class MsEventomaxBffApplicationTests {
 				.andExpect(status().is(expectedStatus));
 		if (expectedStatus == 200) {
 			result.andExpect(content().string("authenticated"));
-			assertThat(downstreamRequestCount()).isEqualTo(1);
+			int expectedDownstreams = (path.startsWith("/api/catalog/reservations/production/") && "Organizador".equals(role)) ? 2 : 1;
+			assertThat(downstreamRequestCount()).isEqualTo(expectedDownstreams);
 		}
 		else if (expectedStatus == 403) {
 			result.andExpect(header().string(HttpHeaders.WWW_AUTHENTICATE,
@@ -823,6 +824,94 @@ class MsEventomaxBffApplicationTests {
 				.andExpect(status().isInternalServerError())
 				.andExpect(content().bytes(errorBody))
 				.andExpect(header().string(HttpHeaders.CONTENT_TYPE, "application/json"));
+	}
+
+	@Test
+	void organizerCanAccessOwnProductionReservations() throws Exception {
+		PRODUCTIONS.respond(200, "{\"id\":42,\"organizerId\":\"org-alpha\"}".getBytes(StandardCharsets.UTF_8),
+				Map.of("Content-Type", "application/json"));
+		byte[] reservationsJson = "[{\"reservationId\":1,\"equipmentId\":10,\"quantity\":2,\"status\":\"RESERVED\"}]"
+				.getBytes(StandardCharsets.UTF_8);
+		CATALOG.respond(200, reservationsJson, Map.of("Content-Type", "application/json"));
+
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Organizador")
+				.claim("tid", "tenant-alpha").claim("oid", "org-alpha"));
+
+		this.mockMvc.perform(get("/api/catalog/reservations/production/42")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(status().isOk())
+				.andExpect(content().bytes(reservationsJson));
+
+		assertThat(PRODUCTIONS.requests()).hasSize(1);
+		assertThat(PRODUCTIONS.requests().get(0).path()).isEqualTo("/api/productions/42");
+		assertThat(CATALOG.requests()).hasSize(1);
+		assertThat(CATALOG.requests().get(0).path()).isEqualTo("/api/catalog/reservations/production/42");
+	}
+
+	@Test
+	void organizerDeniedAccessToOtherOrganizerProductionReservations() throws Exception {
+		PRODUCTIONS.respond(403, "{\"message\":\"Forbidden\"}".getBytes(StandardCharsets.UTF_8),
+				Map.of("Content-Type", "application/json"));
+
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Organizador")
+				.claim("tid", "tenant-alpha").claim("oid", "org-alpha"));
+
+		this.mockMvc.perform(get("/api/catalog/reservations/production/99")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(status().isForbidden());
+
+		assertThat(PRODUCTIONS.requests()).hasSize(1);
+		assertThat(PRODUCTIONS.requests().get(0).path()).isEqualTo("/api/productions/99");
+		assertThat(CATALOG.requests()).isEmpty();
+	}
+
+	@Test
+	void organizerGets404WhenProductionDoesNotExist() throws Exception {
+		PRODUCTIONS.respond(404, "{\"message\":\"Not Found\"}".getBytes(StandardCharsets.UTF_8),
+				Map.of("Content-Type", "application/json"));
+
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Organizador"));
+
+		this.mockMvc.perform(get("/api/catalog/reservations/production/999")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(status().isNotFound());
+
+		assertThat(CATALOG.requests()).isEmpty();
+	}
+
+	@Test
+	void adminAndProducerBypassOwnershipCheck() throws Exception {
+		byte[] reservationsJson = "[{\"reservationId\":2}]".getBytes(StandardCharsets.UTF_8);
+		CATALOG.respond(200, reservationsJson, Map.of("Content-Type", "application/json"));
+
+		String adminToken = ISSUER.sign(ISSUER.validClaims("access_as_user", "Admin"));
+		this.mockMvc.perform(get("/api/catalog/reservations/production/55")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken))
+				.andExpect(status().isOk())
+				.andExpect(content().bytes(reservationsJson));
+
+		assertThat(PRODUCTIONS.requests()).isEmpty();
+
+		String producerToken = ISSUER.sign(ISSUER.validClaims("access_as_user", "Productor"));
+		this.mockMvc.perform(get("/api/catalog/reservations/production/55")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + producerToken))
+				.andExpect(status().isOk());
+
+		assertThat(PRODUCTIONS.requests()).isEmpty();
+	}
+
+	@Test
+	void anonymousCannotAccessReservations() throws Exception {
+		this.mockMvc.perform(get("/api/catalog/reservations/production/42"))
+				.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void auditorCannotAccessReservations() throws Exception {
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Auditor"));
+		this.mockMvc.perform(get("/api/catalog/reservations/production/42")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(status().isForbidden());
 	}
 
 	@RestController

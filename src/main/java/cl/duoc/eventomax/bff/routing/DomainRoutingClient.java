@@ -57,6 +57,33 @@ public class DomainRoutingClient {
 		return forward(this.auditBaseUrl, method, request);
 	}
 
+	public ResponseEntity<byte[]> checkProductionOwnership(Long productionId, HttpServletRequest incoming) {
+		URI target = URI.create(this.productionsBaseUrl + "/api/productions/" + productionId);
+		var outgoing = this.client.method(HttpMethod.GET).uri(target).headers(headers -> {
+			for (String name : REQUEST_HEADERS) {
+				var values = Collections.list(incoming.getHeaders(name));
+				if (!values.isEmpty()) {
+					headers.put(name, values);
+				}
+			}
+		});
+		try {
+			return outgoing.exchange((request, response) -> {
+				var headers = new HttpHeaders();
+				for (String name : RESPONSE_HEADERS) {
+					List<String> values = response.getHeaders().get(name);
+					if (values != null) {
+						headers.put(name, values);
+					}
+				}
+				return new ResponseEntity<>(response.getBody().readAllBytes(), headers, response.getStatusCode());
+			});
+		}
+		catch (ResourceAccessException ex) {
+			return ResponseEntity.status(HttpStatus.BAD_GATEWAY).build();
+		}
+	}
+
 	private ResponseEntity<byte[]> forward(String baseUrl, HttpMethod method, HttpServletRequest incoming)
 			throws IOException {
 		// MVC also matches HEAD to GET mappings; only the approved method may reach the downstream.
