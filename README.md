@@ -1,251 +1,201 @@
-# EventoMax BFF
+# ms-eventomax-bff — Backend for Frontend, Enrutamiento de Dominio y Seguridad OAuth2/JWT (EP2)
 
-Backend for Frontend de **EventoMax**, responsable de aplicar seguridad y enrutar solicitudes protegidas hacia los microservicios de dominio.
+**Asignatura:** Desarrollo Cloud Native I (`DSY1107`)
+**Caso de Estudio:** Caso 8 — Plataforma de Producción y Montaje de Eventos (**EventoMax**)
+**Equipo:** Ignacio Valeria, Benjamín Flores, Benjamín Espinoza
 
-## Estado actual — EP1
+---
 
-Proyecto implementado con Spring Boot 4.1.1. La validación JWT está implementada como OAuth2 Resource Server para los access tokens v2.0 de Microsoft Entra ID: firma, issuer, vigencia (`exp` y `nbf`) y audience.
+## 1. Propósito del Repositorio y Rol en EventoMax
 
-El flujo completo EP1 está validado en cloud:
+`ms-eventomax-bff` actúa como la puerta de enlace de aplicación (*Backend for Frontend*) entre **AWS API Gateway** (y el frontend Angular 22 SPA) y los microservicios internos de **EventoMax EP2** desplegados sobre la red privada Docker `eventomax-net`.
 
+Sus responsabilidades principales son:
+1. **Validación de Seguridad en Segunda Capa (Defense-in-Depth):** Valida criptográficamente el JWT emitido por **Microsoft Entra ID** (`issuer`, `audience`, `exp`, `scope = access_as_user` y claim `roles` de aplicación) aplicando una matriz RBAC granular por ruta y verbo HTTP.
+2. **Enrutamiento y Propagación de Contexto (`DomainRoutingClient`):** Reenvía encabezados de autorización (`Authorization`), correlación distribuida (`X-Trace-Id`, `X-Correlation-Id`) y descarga documental (`Content-Disposition`) hacia `ms-eventomax-productions`, `ms-eventomax-catalog`, `ms-eventomax-notify`, `ms-eventomax-report`, `ms-eventomax-audit` y `rabbit-admin`.
+3. **Verificación Previa de Propiedad (Anti-IDOR en Artefactos):** Antes de servir el ticket de cuadrilla (`GET /api/productions/{id}/crew-ticket`) o el Acta PDF de Cierre (`GET /api/productions/{id}/quote-pdf`) desde `ms-eventomax-notify`, el BFF verifica en `ms-eventomax-productions` que el solicitante tenga acceso autorizado a la producción `{id}`.
+
+---
+
+## 2. Arquitectura del Módulo y Diagrama
+
+```mermaid
+flowchart LR
+    SPA["Angular 22 SPA\n(MSAL OAuth2 PKCE)"] -->|HTTPS + Bearer JWT| APIGW["AWS API Gateway\n(JWT Authorizer)"]
+    APIGW --> BFF["ms-eventomax-bff (:8080 / :8081)"]
+
+    subgraph Red Interna Docker eventomax-net
+        PROD["ms-eventomax-productions"]
+        CAT["ms-eventomax-catalog"]
+        NOTIFY["ms-eventomax-notify"]
+        REP["ms-eventomax-report"]
+        AUD["ms-eventomax-audit"]
+        RADMIN["ms-eventomax-rabbit-admin"]
+    end
+
+    BFF -->|/api/productions/**\n/api/organizers/**| PROD
+    BFF -->|/api/catalog/**| CAT
+    BFF -->|/api/productions/{id}/quote-pdf\n/api/productions/{id}/crew-ticket| NOTIFY
+    BFF -->|/api/report/**| REP
+    BFF -->|/api/audit/**| AUD
+    BFF -->|/api/rabbit-admin/**| RADMIN
 ```
-Angular + MSAL → Microsoft Entra ID → JWT → AWS API Gateway HTTP API JWT Authorizer → ALB → ms-eventomax-bff → Productions/Catalog
-```
 
-El BFF no contiene lógica de negocio, no tiene base de datos propia ni accede directamente a PostgreSQL.
+---
 
-## Tecnologías
+## 3. Stack Tecnológico y Versiones Reales (`pom.xml`)
 
-- Java 25 LTS
-- Spring Boot 4.1.1
-- Spring Web MVC
-- Spring Security 7 (versión gestionada por Spring Boot)
-- OAuth2 Resource Server
-- Spring Boot Actuator
-- SpringDoc OpenAPI 3.1.1 (Swagger UI + Bearer JWT)
-- Maven Wrapper
-- YAML
-- Docker (multi-stage build, usuario no-root)
+| Componente | Tecnología / Dependencia | Versión |
+|---|---|---|
+| Lenguaje | Java (Eclipse Temurin) | `25` |
+| Framework Base | Spring Boot (`spring-boot-starter-parent`) | `4.1.1` |
+| Web / Cliente HTTP | `spring-boot-starter-webmvc` (`RestClient` con timeouts explícitos) | Boot `4.1.1` |
+| Seguridad | `spring-boot-starter-security` + `oauth2-resource-server` | Boot `4.1.1` |
+| Observabilidad | `spring-boot-starter-actuator` + OpenAPI (`springdoc`) | `3.0.3` |
+| Testing | JUnit 5 (`@ParameterizedTest` matriz RBAC de 230 casos), MockMvc | Boot `4.1.1` |
 
-## Arquitectura
+---
 
-El BFF forma parte del flujo seguro de EventoMax:
+## 4. Cumplimiento de Rúbrica EP2 (Matriz Caso 8)
 
-`Angular + MSAL → Microsoft Entra ID → JWT → AWS API Gateway HTTP API JWT Authorizer → ALB → ms-eventomax-bff → microservicio de dominio`
+| Criterio de Evaluación EP2 | Implementación en `ms-eventomax-bff` | Estado |
+|---|---|---|
+| **Autenticación Microsoft Entra ID y Autorización RBAC** | Validación de `issuer-uri`, `AudienceValidator`, scope `access_as_user` y roles `Admin`, `Productor`, `Organizador`, `Auditor` (`EntraJwtAuthoritiesConverter`). | **CUMPLIDO** |
+| **Integración con Artefactos RabbitMQ / Notify** | Enrutamiento seguro de `GET /api/productions/{id}/quote-pdf` y `GET /api/productions/{id}/crew-ticket` hacia `ms-eventomax-notify` previa validación de propiedad de la producción. | **CUMPLIDO** |
+| **Enrutamiento hacia Rabbit Admin (`AmqpAdmin`)** | `RabbitAdminRoutingController` expone `/api/rabbit-admin/**` exclusivamente al rol `Admin` (`scopeAndAnyRole(ADMIN)`). | **CUMPLIDO** |
+| **Trazabilidad y Manejo de Errores Downstream** | Propagación de `X-Trace-Id`, `X-Correlation-Id`, `Content-Disposition` y traducción de fallos de red/timeout a `502 Bad Gateway` / `504 Gateway Timeout`. | **CUMPLIDO** |
 
-El API Gateway realiza una primera validación del JWT mediante JWT Authorizer.
+---
 
-El BFF valida nuevamente el token mediante Spring Security, aunque API Gateway también lo valide, y enruta las solicitudes autorizadas a Productions o Catalog.
+## 5. Matriz Completa de Endpoints y Roles Autorizados
 
-## Responsabilidades
+Todas las rutas `/api/**` exigen `SCOPE_access_as_user`:
 
-`ms-eventomax-bff` debe:
+| Método | Ruta Expuesta en BFF | Destino Downstream | Roles Permitidos |
+|---|---|---|---|
+| `GET` | `/api/productions/**` | `ms-eventomax-productions` | `Admin`, `Productor`, `Organizador` |
+| `POST` | `/api/productions` | `ms-eventomax-productions` | `Admin`, `Organizador` |
+| `PUT` | `/api/productions/*/status` | `ms-eventomax-productions` | `Admin`, `Productor` |
+| `POST`, `DELETE` | `/api/productions/*/services/**` | `ms-eventomax-productions` | `Admin`, `Productor`, `Organizador` |
+| `GET` | `/api/productions/{id}/crew-ticket` | `ms-eventomax-productions` (check) → `ms-eventomax-notify` | `Admin`, `Productor` |
+| `GET` | `/api/productions/{id}/quote-pdf` | `ms-eventomax-productions` (check) → `ms-eventomax-notify` | `Admin`, `Productor`, `Organizador` |
+| `GET` | `/api/organizers/{organizerId}/contact` | `ms-eventomax-productions` | `Admin`, `Productor`, `Organizador` |
+| `PUT` | `/api/organizers/{organizerId}/contact` | `ms-eventomax-productions` | `Admin`, `Organizador` |
+| `GET` | `/api/catalog/services/**`, `/api/catalog/equipment/**` | `ms-eventomax-catalog` | `Admin`, `Productor`, `Organizador` |
+| `POST`, `PUT` | `/api/catalog/services/**`, `/api/catalog/equipment/**` | `ms-eventomax-catalog` | `Admin` |
+| `GET` | `/api/catalog/reservations/productions/*` | `ms-eventomax-productions` (check) → `ms-eventomax-catalog` | `Admin`, `Productor`, `Organizador` |
+| `POST` | `/api/catalog/reservations/**` | `ms-eventomax-catalog` | `Admin`, `Productor` |
+| `GET` | `/api/report/kpis`, `/api/report/top-services` | `ms-eventomax-report` | `Admin`, `Auditor` |
+| `GET` | `/api/audit/timeline` | `ms-eventomax-audit` | `Admin`, `Auditor` |
+| `GET`, `POST`, `DELETE` | `/api/rabbit-admin/**` | `ms-eventomax-rabbit-admin` | `Admin` |
 
-- Validar firma, issuer, audience y vigencia del JWT.
-- Aplicar autorización según roles y claims.
-- Responder `401 Unauthorized` cuando no exista autenticación válida.
-- Responder `403 Forbidden` cuando el usuario esté autenticado pero no autorizado.
-- Enrutar solicitudes hacia los microservicios de dominio correspondientes.
-- Mantener separada la lógica de seguridad y orquestación de la lógica de negocio.
+---
 
-## Microservicios de dominio
+## 6. Seguridad y Autenticación/Autorización JWT
 
-Durante EP1 el BFF se integra con:
+- **Issuer:** `https://login.microsoftonline.com/f191bdc8-7926-4722-9ec0-cba663701940/v2.0` (`ENTRA_ISSUER_URI`).
+- **Audience:** `api://a1a87bcd-fed7-4d65-83c3-338389b80093` (`ENTRA_AUDIENCE`).
+- **Regla Deny-by-Default:** Cualquier ruta no declarada explícitamente en `SecurityConfiguration` es rechazada con `.anyRequest().denyAll()`.
+- **Respuestas Determinísticas:** `401 Unauthorized` para tokens ausentes/inválidos y `403 Forbidden` (`application/problem+json`) para roles o scopes insuficientes.
 
-- `ms-eventomax-productions`
-- `ms-eventomax-catalog`
+---
 
-La arquitectura semestral contempla además:
+## 7. Integración con RabbitMQ y Kafka (Rol de Pasarela)
 
-- `ms-eventomax-notify`
-- `ms-eventomax-report`
-- `ms-eventomax-audit`
+El BFF no se conecta directamente a los brokers AMQP/Kafka, sino que expone de forma autenticada:
+- La descarga de los artefactos generados asíncronamente por RabbitMQ en `ms-eventomax-notify` (`/crew-ticket` y `/quote-pdf`).
+- La administración programática de colas, exchanges y bindings (`demo.*`) hacia `rabbit-admin` (`/api/rabbit-admin/**`).
+- Las consultas sobre las proyecciones Kafka de `ms-eventomax-report` y `ms-eventomax-audit`.
 
-## Seguridad
+---
 
-El BFF valida access tokens de la API `eventomax-api`. No utiliza Client Secret: verifica la firma con las claves públicas obtenidas mediante el descubrimiento del issuer de Microsoft Entra ID.
+## 8. Base de Datos
 
-`SecurityConfiguration` combina `JwtValidators.createDefaultWithIssuer(...)` con `AudienceValidator` y un `JwtClaimValidator` que exige la presencia de `exp`; así conserva los validadores estándar y añade las comprobaciones explícitas de audience y expiración obligatoria. La audience esperada debe aparecer exactamente en el claim; una audience ausente o incorrecta se rechaza. Se conserva la tolerancia temporal estándar de Spring Security de 60 segundos.
+`ms-eventomax-bff` es un servicio **100% stateless**; no mantiene base de datos propia ni migraciones Flyway.
 
-El decoder usa `SupplierJwtDecoder` para diferir el descubrimiento y la carga de claves hasta la primera solicitud con Bearer token. El arranque no requiere conectarse a Entra ID; la validación de tokens sí necesita acceso a sus metadatos y claves públicas cuando no están en caché. Este diseño sigue la [documentación oficial de Spring Security](https://docs.spring.io/spring-security/reference/servlet/oauth2/resource-server/jwt.html).
+---
 
-La cadena de seguridad permite `GET /actuator/health` y `GET /actuator/info` sin autenticación. Permitir una ruta no expone el endpoint: se conserva la exposición predeterminada de Actuator, que incluye `health`.
+## 9. Variables de Entorno Requeridas
 
-La autenticación usa `Authorization: Bearer`, sin sesiones ni cookies de autenticación. CSRF y el logout de sesión están deshabilitados para este flujo. Las validaciones JWT se conservan.
+| Variable | Ejemplo Placeholder | Descripción |
+|---|---|---|
+| `ENTRA_ISSUER_URI` | `https://login.microsoftonline.com/<TENANT_ID>/v2.0` | Issuer URI de Microsoft Entra ID |
+| `ENTRA_AUDIENCE` | `api://a1a87bcd-fed7-4d65-83c3-338389b80093` | Audience del API en Entra ID |
+| `PRODUCTIONS_BASE_URL` | `http://ms-eventomax-productions:8080` | URL interna de Productions |
+| `CATALOG_BASE_URL` | `http://ms-eventomax-catalog:8080` | URL interna de Catalog |
+| `REPORT_BASE_URL` | `http://ms-eventomax-report:8080` | URL interna de Report |
+| `AUDIT_BASE_URL` | `http://ms-eventomax-audit:8080` | URL interna de Audit |
+| `NOTIFY_BASE_URL` | `http://ms-eventomax-notify:8080` | URL interna de Notify |
+| `RABBIT_ADMIN_BASE_URL` | `http://ms-eventomax-rabbit-admin:8080` | URL interna de Rabbit Admin |
+| `DOWNSTREAM_CONNECT_TIMEOUT` | `3s` | Timeout de conexión hacia microservicios |
+| `DOWNSTREAM_READ_TIMEOUT` | `10s` | Timeout de lectura hacia microservicios |
 
-### Scopes, roles y autorización
+---
 
-`EntraJwtAuthoritiesConverter` conserva la conversión estándar de scopes y valida la estructura de los roles:
-
-- El `JwtGrantedAuthoritiesConverter` estándar conserva la conversión de scopes: `scp: "access_as_user"` produce `SCOPE_access_as_user`.
-- `roles` debe ser una colección formada únicamente por strings. Solo los roles canónicos generan authorities `ROLE_*`: `["Admin", "Productor"]` produce `ROLE_Admin` y `ROLE_Productor`.
-- Un claim malformado no concede sus authorities ni provoca errores 500. No se aceptan aliases `Producer`/`Organizer`, roles desconocidos ni diferencias de mayúsculas/minúsculas.
-- Se mantiene la precedencia estándar `scope` sobre `scp`; las colecciones de scopes también se comprueban antes de convertirlas.
-
-Los roles funcionales son `Admin`, `Productor`, `Organizador` y `Auditor`, con coincidencia exacta de mayúsculas/minúsculas. No existe una jerarquía implícita: `Admin` no obtiene permisos reservados a otros roles, como crear productions.
-
-Cada regla de dominio requiere **simultáneamente** `SCOPE_access_as_user` y al menos uno de los roles indicados, mediante `AuthorizationManagers.allOf(...)`:
-
-| Método | Ruta | Roles permitidos |
-| --- | --- | --- |
-| GET | `/api/productions/**` | Admin, Productor, Organizador |
-| POST | `/api/productions` | Productor, Organizador |
-| PUT | `/api/productions/{id}/status` | Admin, Productor |
-| GET | `/api/catalog/**` | Admin, Productor |
-| POST | `/api/catalog/**` | Admin |
-| PUT | `/api/catalog/**` | Admin |
-| GET | `/api/report/**` | Admin |
-| GET | `/api/audit/**` | Admin, Auditor |
-
-Las demás combinaciones de método y ruta requieren únicamente autenticación válida. La matriz configura seguridad; solo los contratos de routing descritos abajo tienen controllers productivos. Una ruta autorizada sin contrato implementado devuelve `404` o `405`, sin llamar a un downstream.
-
-### Respuestas 401 y 403
-
-- Sin Bearer token o con JWT inválido: `401 Unauthorized`, mediante `BearerTokenAuthenticationEntryPoint`.
-- Con JWT válido pero sin `access_as_user` o sin rol suficiente: `403 Forbidden`, mediante `BearerTokenAccessDeniedHandler`.
-- Con JWT válido, scope requerido y rol permitido: la solicitud supera la autorización.
-
-Se configura explícitamente el comportamiento estándar, con cabecera `WWW-Authenticate` y sin cuerpos JSON personalizados. El handler estándar informa `insufficient_scope` también cuando falta un rol permitido.
-
-### OpenAPI / Swagger
-
-SpringDoc OpenAPI 3.1.1 está integrado con esquema de seguridad Bearer JWT (`@SecurityScheme`). Los endpoints de documentación (`/v3/api-docs`, `/swagger-ui.html`) están protegidos por Spring Security y requieren un JWT válido.
-
-### Configuración externalizada
-
-Antes de ejecutar la aplicación, define estas variables en el entorno del proceso o en la configuración de ejecución del IDE:
-
-| Variable | Configuración | Valor requerido |
-| --- | --- | --- |
-| `ENTRA_ISSUER_URI` | `spring.security.oauth2.resourceserver.jwt.issuer-uri` | Issuer v2.0 confirmado del tenant de `eventomax-api`, con coincidencia exacta con `iss`. |
-| `ENTRA_AUDIENCE` | `eventomax.security.jwt.audience` | Application (client) ID de `eventomax-api` para los access tokens v2.0. No es el scope delegado ni la URI `api://.../access_as_user`. |
-
-Ambas variables son obligatorias y no tienen valores por defecto. No se incluyen identificadores del entorno ni tokens en el código. Un archivo `.env` no se carga automáticamente.
-
-## Routing a Productions y Catalog
-
-`ProductionsRoutingController` y `CatalogRoutingController` declaran los contratos explícitos. Ambos delegan el transporte HTTP a `DomainRoutingClient`, que usa `RestClient`. `DomainRoutingConfiguration` configura destinos y cliente HTTP; aprovecha el `RestClient.Builder` de Boot cuando está disponible y utiliza el builder de Spring Framework en caso contrario, sin añadir un starter.
-
-| Servicio | Método | Contrato |
-| --- | --- | --- |
-| Productions | POST | `/api/productions` |
-| Productions | GET | `/api/productions/{id}` |
-| Productions | GET | `/api/productions` |
-| Productions | PUT | `/api/productions/{id}/status` |
-| Catalog | GET | `/api/catalog/services` |
-| Catalog | POST | `/api/catalog/services` |
-| Catalog | PUT | `/api/catalog/services/{id}` |
-
-El listado de productions conserva la query original, por ejemplo `?status=CONFIRMADO&from=2026-09-01T00:00:00&to=2026-09-30T23:59:59`, incluidos orden, parámetros repetidos y escapes. El path y la query ya codificados se envían mediante una `URI`, sin expandir plantillas ni recodificarlos.
-
-Se reenvían únicamente `Authorization`, `Content-Type` y `Accept` cuando existen. El token Bearer original se conserva y no se registra. No hay un header de correlación definido en el proyecto. `Host`, `Connection`, `Content-Length` y `Transfer-Encoding` no se copian: el cliente HTTP genera los headers de transporte que necesita.
-
-Los bodies se manejan como bytes opacos, sin DTOs de dominio ni validación de JSON, estados o inventario. Se deshabilita `FormContentFilter` para evitar que MVC consuma el body de formularios PUT antes del routing. Los payloads se almacenan en memoria durante el transporte; habrá que revisar límites/streaming si se incorporan cargas grandes. Las solicitudes HEAD implícitas de MVC no se reenvían, porque no forman parte de los contratos aprobados.
-
-El BFF conserva el status, body, `Content-Type` y `Location` del downstream. Se usa `RestClient.exchange(...)` para propagar también `4xx` y `5xx`, sin convertirlos en `200`; no se siguen redirecciones. Un fallo de conexión o timeout produce `502 Bad Gateway` sin cuerpo. No se aplican reintentos ni circuit breaker. El uso de `URI`, body opaco y `exchange` sigue la [documentación de RestClient](https://docs.spring.io/spring-framework/reference/integration/rest-clients.html).
-
-### Variables de downstream
-
-| Variable | Propiedad | Requisito / valor predeterminado |
-| --- | --- | --- |
-| `PRODUCTIONS_BASE_URL` | `eventomax.downstream.productions-base-url` | URL HTTP(S) de Productions; obligatoria, sin valor predeterminado. |
-| `CATALOG_BASE_URL` | `eventomax.downstream.catalog-base-url` | URL HTTP(S) de Catalog; obligatoria, sin valor predeterminado. |
-| `DOWNSTREAM_CONNECT_TIMEOUT` | `eventomax.downstream.connect-timeout` | Opcional; `3s`. |
-| `DOWNSTREAM_READ_TIMEOUT` | `eventomax.downstream.read-timeout` | Opcional; `10s`. |
-
-Las URLs base no deben incluir credenciales, query ni fragmento. A la base se añade el path completo del contrato; no se debe repetir `/api/productions` ni `/api/catalog/services` en la base.
-
-## Despliegue cloud — EC2
-
-El BFF se despliega en una instancia EC2 de AWS Academy usando Docker Compose.
-
-### Requisitos
-
-- Docker y Docker Compose instalados en la EC2.
-- Red Docker externa `eventomax-net` creada previamente:
-  ```bash
-  docker network create eventomax-net
-  ```
-- Los microservicios `ms-eventomax-productions` y `ms-eventomax-catalog` deben estar corriendo y conectados a `eventomax-net`.
-- Archivo `.env` con las variables reales (no versionado).
-
-### Despliegue
+## 10. Ejecución Local Paso a Paso
 
 ```bash
-cp .env.example .env
-# Editar .env con los valores reales de Entra ID
+export ENTRA_ISSUER_URI="https://login.microsoftonline.com/f191bdc8-7926-4722-9ec0-cba663701940/v2.0"
+export ENTRA_AUDIENCE="api://a1a87bcd-fed7-4d65-83c3-338389b80093"
+export PRODUCTIONS_BASE_URL="http://localhost:8082"
+export CATALOG_BASE_URL="http://localhost:8080"
+export REPORT_BASE_URL="http://localhost:8084"
+export AUDIT_BASE_URL="http://localhost:8085"
+export NOTIFY_BASE_URL="http://localhost:8083"
+export RABBIT_ADMIN_BASE_URL="http://localhost:8086"
 
+mvn spring-boot:run
+```
+
+---
+
+## 11. Ejecución de Pruebas Automatizadas
+
+```bash
+mvn clean test
+```
+
+**Resultado certificado en EP2:** `Tests run: 230, Failures: 0, Errors: 0, Skipped: 0 — BUILD SUCCESS`.
+
+---
+
+## 12. Construcción y Despliegue Docker / Preparación Cloud
+
+```bash
+docker build -t ms-eventomax-bff:ep2 .
 docker compose -f docker-compose.prod.yml up -d --build
 ```
 
-### Configuración de producción
+---
 
-- **Puerto:** host `8080` → container `8080` (el ALB accede al BFF por este puerto).
-- **Restart policy:** `unless-stopped` — el contenedor se reinicia automáticamente tras un reinicio de la EC2 o un crash, evitando el incidente donde el BFF quedaba `Exited` y el ALB devolvía `503`.
-- **Red:** `eventomax-net` (externa) — permite comunicación por nombre de servicio con Productions y Catalog.
-- **Health check:** El ALB verifica `/actuator/health` (accesible sin JWT). No se agrega `HEALTHCHECK` Docker porque la imagen runtime no incluye `curl`/`wget`.
-- **Sin DB:** El BFF no tiene base de datos propia ni accede a RDS.
+## 13. Estructura del Proyecto
 
-### Variables de entorno
-
-Copiar `.env.example` a `.env` y completar con valores reales. El archivo `.env` está excluido de Git por `.gitignore`.
-
-## Credenciales
-
-No se deben almacenar en este repositorio:
-
-- Client Secrets
-- Access Tokens
-- credenciales AWS
-- credenciales PostgreSQL
-- archivos `.env` reales
-- passwords o claves privadas
-
-## Estrategia de ramas
-
-- `main`: versión estable y preparada para entrega.
-- `develop`: rama de integración.
-- `feature/*`: desarrollo de historias de usuario.
-- `fix/*`: correcciones.
-- `chore/*`: configuración e infraestructura.
-
-Flujo de integración:
-
-`feature/* → Pull Request → develop → pruebas → Pull Request → main`
-
-## Ejecución local
-
-Requisito: **JDK 25**, con `JAVA_HOME` apuntando al JDK. No se requiere instalar Maven por separado; se utiliza el Wrapper incluido.
-
-`spring-boot:run` requiere las variables anteriores. Los tests suministran su propia configuración y no requieren variables reales de Entra ID.
-
-### Windows
-
-```powershell
-.\mvnw.cmd clean test
-.\mvnw.cmd spring-boot:run
+```text
+ms-eventomax-bff/
+├── src/main/java/cl/duoc/eventomax/bff/
+│   ├── routing/
+│   │   ├── AuditRoutingController.java
+│   │   ├── CatalogEquipmentRoutingController.java
+│   │   ├── CatalogReservationsRoutingController.java
+│   │   ├── CatalogRoutingController.java
+│   │   ├── DomainRoutingClient.java
+│   │   ├── DomainRoutingConfiguration.java
+│   │   ├── OrganizersRoutingController.java
+│   │   ├── ProductionsRoutingController.java
+│   │   ├── RabbitAdminRoutingController.java
+│   │   └── ReportRoutingController.java
+│   └── security/
+│       ├── AudienceValidator.java
+│       ├── EntraJwtAuthoritiesConverter.java
+│       └── SecurityConfiguration.java
+├── src/main/resources/application.yaml
+├── Dockerfile
+└── docker-compose.prod.yml
 ```
 
-### Linux/macOS
+---
 
-```bash
-./mvnw clean test
-./mvnw spring-boot:run
-```
+## 14. Estado Actual de Certificación EP2 y Trazabilidad Jira
 
-### Pruebas automatizadas
-
-Las pruebas unitarias cubren la coincidencia exacta de audience, múltiples audiences, claims ausentes/vacíos y configuración de audience inválida.
-
-También verifican el mapeo `ROLE_*`, múltiples roles, conservación de `SCOPE_*`, comportamiento estándar de claims de scopes, duplicados y sensibilidad a mayúsculas/minúsculas.
-
-Las pruebas de integración ejercitan el decoder, la cadena de seguridad y los controllers reales con JWT sintéticos firmados mediante claves RSA efímeras. `LocalJwtIssuer` proporciona metadatos/JWKS, y dos instancias de `LocalDownstreamServer` capturan las solicitudes a Productions y Catalog. Todos utilizan loopback y puertos efímeros; no se realizan llamadas a Internet ni a Microsoft Entra ID, ni se necesita Docker.
-
-Las pruebas de routing verifican los siete contratos, body/path/query/headers, estados `201`/`202`/`204`, errores downstream `400`/`401`/`403`/`404`/`409`/`500`, redirecciones, fallo de conexión `502` y timeout durante headers/body `502`. También cubren claims malformados, ausencia de `exp` y bodies de formulario PUT. Las pruebas de seguridad comprueban que una solicitud rechazada no llama al downstream. Los dumps de MockMvc están deshabilitados para no imprimir Bearer tokens.
-
-Las pruebas de OpenAPI runtime verifican que `/v3/api-docs` requiere JWT (`401` sin token, `200` con token válido) y que Swagger UI redirige correctamente bajo autenticación.
-
-## Proyecto académico
-
-**Asignatura:** DSY1107 – Desarrollo Cloud Native I
-**Caso:** Caso 8 – EventoMax
+- **Pruebas Automatizadas:** `230/230` aprobadas.
+- **Historias Jira:** `EMX-72` (Rutas Audit/Report), `EMX-Bloque-1A` (Equipos y Reservas), `EP2-FIX-01` (Rutas Notify Quote PDF, Crew Ticket, Contactos de Organizador y Rabbit Admin).

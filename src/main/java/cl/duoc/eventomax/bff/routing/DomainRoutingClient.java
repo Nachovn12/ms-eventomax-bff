@@ -16,19 +16,47 @@ import org.springframework.web.client.RestClient;
 
 public class DomainRoutingClient {
 
+	public static final String TRACE_ID_HEADER = "X-Trace-Id";
+	public static final String CORRELATION_ID_HEADER = "X-Correlation-Id";
+
 	private static final List<String> REQUEST_HEADERS =
-			List.of(HttpHeaders.AUTHORIZATION, HttpHeaders.CONTENT_TYPE, HttpHeaders.ACCEPT);
+			List.of(HttpHeaders.AUTHORIZATION, HttpHeaders.CONTENT_TYPE, HttpHeaders.ACCEPT,
+					TRACE_ID_HEADER, CORRELATION_ID_HEADER);
 	private static final List<String> RESPONSE_HEADERS =
-			List.of(HttpHeaders.CONTENT_TYPE, HttpHeaders.LOCATION);
+			List.of(HttpHeaders.CONTENT_TYPE, HttpHeaders.LOCATION, HttpHeaders.CONTENT_DISPOSITION,
+					TRACE_ID_HEADER, CORRELATION_ID_HEADER);
 
 	private final RestClient client;
 	private final String productionsBaseUrl;
 	private final String catalogBaseUrl;
+	private final String reportBaseUrl;
+	private final String auditBaseUrl;
+	private final String notifyBaseUrl;
+	private final String rabbitAdminBaseUrl;
 
-	public DomainRoutingClient(RestClient client, URI productionsBaseUrl, URI catalogBaseUrl) {
+	public DomainRoutingClient(RestClient client, URI productionsBaseUrl, URI catalogBaseUrl,
+			URI reportBaseUrl, URI auditBaseUrl) {
+		this(client, productionsBaseUrl, catalogBaseUrl, reportBaseUrl, auditBaseUrl, productionsBaseUrl);
+	}
+
+	public DomainRoutingClient(RestClient client, URI productionsBaseUrl, URI catalogBaseUrl,
+			URI reportBaseUrl, URI auditBaseUrl, URI notifyBaseUrl) {
+		this(client, productionsBaseUrl, catalogBaseUrl, reportBaseUrl, auditBaseUrl, notifyBaseUrl, productionsBaseUrl);
+	}
+
+	public DomainRoutingClient(RestClient client, URI productionsBaseUrl, URI catalogBaseUrl,
+			URI reportBaseUrl, URI auditBaseUrl, URI notifyBaseUrl, URI rabbitAdminBaseUrl) {
 		this.client = client;
 		this.productionsBaseUrl = baseUrl(productionsBaseUrl);
 		this.catalogBaseUrl = baseUrl(catalogBaseUrl);
+		this.reportBaseUrl = baseUrl(reportBaseUrl);
+		this.auditBaseUrl = baseUrl(auditBaseUrl);
+		this.notifyBaseUrl = baseUrl(notifyBaseUrl);
+		this.rabbitAdminBaseUrl = baseUrl(rabbitAdminBaseUrl);
+	}
+
+	ResponseEntity<byte[]> rabbitAdmin(HttpMethod method, HttpServletRequest request) throws IOException {
+		return forward(this.rabbitAdminBaseUrl, method, request);
 	}
 
 	ResponseEntity<byte[]> productions(HttpMethod method, HttpServletRequest request) throws IOException {
@@ -37,6 +65,59 @@ public class DomainRoutingClient {
 
 	ResponseEntity<byte[]> catalog(HttpMethod method, HttpServletRequest request) throws IOException {
 		return forward(this.catalogBaseUrl, method, request);
+	}
+
+	ResponseEntity<byte[]> report(HttpMethod method, HttpServletRequest request) throws IOException {
+		return forward(this.reportBaseUrl, method, request);
+	}
+
+	ResponseEntity<byte[]> audit(HttpMethod method, HttpServletRequest request) throws IOException {
+		return forward(this.auditBaseUrl, method, request);
+	}
+
+	ResponseEntity<byte[]> notify(HttpMethod method, HttpServletRequest request) throws IOException {
+		return forward(this.notifyBaseUrl, method, request);
+	}
+
+	public ResponseEntity<byte[]> checkProductionOwnership(Long productionId, HttpServletRequest incoming) {
+		URI target = URI.create(this.productionsBaseUrl + "/api/productions/" + productionId);
+		return forwardDirect(target, HttpMethod.GET, incoming);
+	}
+
+	public ResponseEntity<byte[]> notifyTicket(Long productionId, HttpServletRequest incoming) {
+		URI target = URI.create(this.notifyBaseUrl + "/api/notify/tickets/" + productionId);
+		return forwardDirect(target, HttpMethod.GET, incoming);
+	}
+
+	public ResponseEntity<byte[]> notifyQuotePdf(Long productionId, HttpServletRequest incoming) {
+		URI target = URI.create(this.notifyBaseUrl + "/api/notify/quotes/" + productionId + "/pdf");
+		return forwardDirect(target, HttpMethod.GET, incoming);
+	}
+
+	private ResponseEntity<byte[]> forwardDirect(URI target, HttpMethod method, HttpServletRequest incoming) {
+		var outgoing = this.client.method(method).uri(target).headers(headers -> {
+			for (String name : REQUEST_HEADERS) {
+				var values = Collections.list(incoming.getHeaders(name));
+				if (!values.isEmpty()) {
+					headers.put(name, values);
+				}
+			}
+		});
+		try {
+			return outgoing.exchange((request, response) -> {
+				var headers = new HttpHeaders();
+				for (String name : RESPONSE_HEADERS) {
+					List<String> values = response.getHeaders().get(name);
+					if (values != null) {
+						headers.put(name, values);
+					}
+				}
+				return new ResponseEntity<>(response.getBody().readAllBytes(), headers, response.getStatusCode());
+			});
+		}
+		catch (ResourceAccessException ex) {
+			return ResponseEntity.status(HttpStatus.BAD_GATEWAY).build();
+		}
 	}
 
 	private ResponseEntity<byte[]> forward(String baseUrl, HttpMethod method, HttpServletRequest incoming)

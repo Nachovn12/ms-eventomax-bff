@@ -1,17 +1,23 @@
 services:
   ms-eventomax-bff:
     container_name: ms-eventomax-bff
-    build: .
+    build:
+      context: .
     ports:
       - "8080:8080"
     restart: unless-stopped
     environment:
-      ENTRA_ISSUER_URI: ${ENTRA_ISSUER_URI}
-      ENTRA_AUDIENCE: ${ENTRA_AUDIENCE}
-      PRODUCTIONS_BASE_URL: ${PRODUCTIONS_BASE_URL}
-      CATALOG_BASE_URL: ${CATALOG_BASE_URL}
+      ENTRA_ISSUER_URI: ${ENTRA_ISSUER_URI:?ENTRA_ISSUER_URI is required}
+      ENTRA_AUDIENCE: ${ENTRA_AUDIENCE:?ENTRA_AUDIENCE is required}
+      PRODUCTIONS_BASE_URL: ${PRODUCTIONS_BASE_URL:?PRODUCTIONS_BASE_URL is required}
+      CATALOG_BASE_URL: ${CATALOG_BASE_URL:?CATALOG_BASE_URL is required}
+      REPORT_BASE_URL: ${REPORT_BASE_URL:?REPORT_BASE_URL is required}
+      AUDIT_BASE_URL: ${AUDIT_BASE_URL:?AUDIT_BASE_URL is required}
+      NOTIFY_BASE_URL: ${NOTIFY_BASE_URL:-http://ms-eventomax-notify:8080}
+      RABBIT_ADMIN_BASE_URL: ${RABBIT_ADMIN_BASE_URL:-http://ms-eventomax-rabbit-admin:8080}
       DOWNSTREAM_CONNECT_TIMEOUT: ${DOWNSTREAM_CONNECT_TIMEOUT:-3s}
       DOWNSTREAM_READ_TIMEOUT: ${DOWNSTREAM_READ_TIMEOUT:-10s}
+      JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:--XX:InitialRAMPercentage=25.0 -XX:MaxRAMPercentage=65.0 -XX:+ExitOnOutOfMemoryError}
     networks:
       - eventomax-net
 

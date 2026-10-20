@@ -18,5 +18,9 @@ eventomax:
   downstream:
     productions-base-url: ${PRODUCTIONS_BASE_URL}
     catalog-base-url: ${CATALOG_BASE_URL}
+    report-base-url: ${REPORT_BASE_URL}
+    audit-base-url: ${AUDIT_BASE_URL}
+    notify-base-url: ${NOTIFY_BASE_URL:http://localhost:8083}
+    rabbit-admin-base-url: ${RABBIT_ADMIN_BASE_URL:http://localhost:8086}
     connect-timeout: ${DOWNSTREAM_CONNECT_TIMEOUT:3s}
     read-timeout: ${DOWNSTREAM_READ_TIMEOUT:10s}

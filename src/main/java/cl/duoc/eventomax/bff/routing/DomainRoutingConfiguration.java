@@ -34,11 +34,15 @@ public class DomainRoutingConfiguration {
 	DomainRoutingClient domainRoutingClient(ObjectProvider<RestClient.Builder> builders,
 			JdkClientHttpRequestFactory domainRequestFactory,
 			@Value("${eventomax.downstream.productions-base-url}") URI productionsBaseUrl,
-			@Value("${eventomax.downstream.catalog-base-url}") URI catalogBaseUrl) {
+			@Value("${eventomax.downstream.catalog-base-url}") URI catalogBaseUrl,
+			@Value("${eventomax.downstream.report-base-url}") URI reportBaseUrl,
+			@Value("${eventomax.downstream.audit-base-url}") URI auditBaseUrl,
+			@Value("${eventomax.downstream.notify-base-url:http://localhost:8083}") URI notifyBaseUrl,
+			@Value("${eventomax.downstream.rabbit-admin-base-url:http://localhost:8086}") URI rabbitAdminBaseUrl) {
 		// Use Boot's builder when available, without requiring another starter.
 		RestClient client = builders.getIfAvailable(RestClient::builder).clone()
 				.requestFactory(domainRequestFactory).build();
-		return new DomainRoutingClient(client, productionsBaseUrl, catalogBaseUrl);
+		return new DomainRoutingClient(client, productionsBaseUrl, catalogBaseUrl, reportBaseUrl, auditBaseUrl, notifyBaseUrl, rabbitAdminBaseUrl);
 	}
 
 }

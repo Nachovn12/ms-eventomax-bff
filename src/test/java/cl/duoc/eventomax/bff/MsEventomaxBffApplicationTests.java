@@ -4,6 +4,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Stream;
@@ -48,6 +49,8 @@ class MsEventomaxBffApplicationTests {
 	private static final LocalJwtIssuer ISSUER = LocalJwtIssuer.start();
 	private static final LocalDownstreamServer PRODUCTIONS = LocalDownstreamServer.start();
 	private static final LocalDownstreamServer CATALOG = LocalDownstreamServer.start();
+	private static final LocalDownstreamServer REPORT = LocalDownstreamServer.start();
+	private static final LocalDownstreamServer AUDIT = LocalDownstreamServer.start();
 
 	@Autowired
 	private MockMvc mockMvc;
@@ -58,12 +61,16 @@ class MsEventomaxBffApplicationTests {
 		registry.add("ENTRA_AUDIENCE", () -> LocalJwtIssuer.AUDIENCE);
 		registry.add("PRODUCTIONS_BASE_URL", PRODUCTIONS::baseUrl);
 		registry.add("CATALOG_BASE_URL", CATALOG::baseUrl);
+		registry.add("REPORT_BASE_URL", REPORT::baseUrl);
+		registry.add("AUDIT_BASE_URL", AUDIT::baseUrl);
 	}
 
 	@BeforeEach
 	void resetDownstreams() {
 		PRODUCTIONS.reset();
 		CATALOG.reset();
+		REPORT.reset();
+		AUDIT.reset();
 	}
 
 	@AfterAll
@@ -71,6 +78,8 @@ class MsEventomaxBffApplicationTests {
 		ISSUER.close();
 		PRODUCTIONS.close();
 		CATALOG.close();
+		REPORT.close();
+		AUDIT.close();
 	}
 
 	@Test
@@ -213,6 +222,22 @@ class MsEventomaxBffApplicationTests {
 			PUT,  /api/catalog/services/42,   Productor,   403
 			PUT,  /api/catalog/services/42,   Organizador, 403
 			PUT,  /api/catalog/services/42,   Auditor,     403
+			GET,  /api/catalog/equipment,     Admin,       200
+			GET,  /api/catalog/equipment,     Productor,   200
+			GET,  /api/catalog/equipment,     Organizador, 403
+			GET,  /api/catalog/equipment,     Auditor,     403
+			POST, /api/catalog/equipment,     Admin,       200
+			POST, /api/catalog/equipment,     Productor,   403
+			POST, /api/catalog/equipment,     Organizador, 403
+			POST, /api/catalog/equipment,     Auditor,     403
+			PUT,  /api/catalog/equipment/42,   Admin,       200
+			PUT,  /api/catalog/equipment/42,   Productor,   403
+			PUT,  /api/catalog/equipment/42,   Organizador, 403
+			PUT,  /api/catalog/equipment/42,   Auditor,     403
+			GET,  /api/catalog/reservations/production/42, Admin, 200
+			GET,  /api/catalog/reservations/production/42, Productor, 200
+			GET,  /api/catalog/reservations/production/42, Organizador, 200
+			GET,  /api/catalog/reservations/production/42, Auditor, 403
 			GET,  /api/report/summary,        Admin,       404
 			GET,  /api/report/summary,        Productor,   403
 			GET,  /api/report/summary,        Organizador, 403
@@ -221,6 +246,18 @@ class MsEventomaxBffApplicationTests {
 			GET,  /api/audit/events,          Productor,   403
 			GET,  /api/audit/events,          Organizador, 403
 			GET,  /api/audit/events,          Auditor,     404
+			GET,  /api/report/kpis,           Admin,       200
+			GET,  /api/report/kpis,           Productor,   403
+			GET,  /api/report/kpis,           Organizador, 403
+			GET,  /api/report/kpis,           Auditor,     403
+			GET,  /api/report/top-services,   Admin,       200
+			GET,  /api/report/top-services,   Productor,   403
+			GET,  /api/report/top-services,   Organizador, 403
+			GET,  /api/report/top-services,   Auditor,     403
+			GET,  /api/audit/timeline,        Admin,       200
+			GET,  /api/audit/timeline,        Auditor,     200
+			GET,  /api/audit/timeline,        Productor,   403
+			GET,  /api/audit/timeline,        Organizador, 403
 			""")
 	void enforcesRoleMatrix(String method, String path, String role, int expectedStatus) throws Exception {
 		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", role));
@@ -230,7 +267,8 @@ class MsEventomaxBffApplicationTests {
 				.andExpect(status().is(expectedStatus));
 		if (expectedStatus == 200) {
 			result.andExpect(content().string("authenticated"));
-			assertThat(downstreamRequestCount()).isEqualTo(1);
+			int expectedDownstreams = (path.startsWith("/api/catalog/reservations/production/") && "Organizador".equals(role)) ? 2 : 1;
+			assertThat(downstreamRequestCount()).isEqualTo(expectedDownstreams);
 		}
 		else if (expectedStatus == 403) {
 			result.andExpect(header().string(HttpHeaders.WWW_AUTHENTICATE,
@@ -296,8 +334,7 @@ class MsEventomaxBffApplicationTests {
 			PUT, /api/productions/42/details, 404
 			PUT, /api/productions/42/extra/status, 404
 			DELETE, /api/catalog/services/42, 405
-			POST, /api/report/summary, 404
-			POST, /api/audit/events, 404
+			POST, /api/other/summary, 404
 			""")
 	void unspecifiedRoutesOnlyRequireAuthentication(String method, String path, int expectedStatus) throws Exception {
 		this.mockMvc.perform(request(HttpMethod.valueOf(method), path)).andExpect(status().isUnauthorized());
@@ -338,7 +375,8 @@ class MsEventomaxBffApplicationTests {
 	}
 
 	private static int downstreamRequestCount() {
-		return PRODUCTIONS.requests().size() + CATALOG.requests().size();
+		return PRODUCTIONS.requests().size() + CATALOG.requests().size()
+				+ REPORT.requests().size() + AUDIT.requests().size();
 	}
 
 	@ParameterizedTest(name = "routes {0} {1} -> {3}")
@@ -350,13 +388,35 @@ class MsEventomaxBffApplicationTests {
 			GET, /api/catalog/services, Productor, 200
 			POST, /api/catalog/services, Admin, 201
 			PUT, /api/catalog/services/service-42, Admin, 200
+			GET, /api/catalog/equipment, Productor, 200
+			POST, /api/catalog/equipment, Admin, 201
+			GET, /api/catalog/reservations/production/42, Productor, 200
+			GET, /api/report/kpis, Admin, 200
+			GET, /api/report/top-services, Admin, 501
+			GET, /api/audit/timeline, Auditor, 200
+			GET, /api/audit/timeline, Admin, 200
 			""")
 	void routesApprovedContracts(String method, String path, String role, int downstreamStatus) throws Exception {
-		boolean productions = path.startsWith("/api/productions");
-		LocalDownstreamServer downstream = productions ? PRODUCTIONS : CATALOG;
-		LocalDownstreamServer other = productions ? CATALOG : PRODUCTIONS;
-		byte[] response = "{ \"id\": \"42\", \"description\": \"Respuesta íntegra\" }\n".getBytes(StandardCharsets.UTF_8);
-		String contentType = "application/json;charset=UTF-8";
+		LocalDownstreamServer downstream;
+		if (path.startsWith("/api/productions")) {
+			downstream = PRODUCTIONS;
+		}
+		else if (path.startsWith("/api/catalog")) {
+			downstream = CATALOG;
+		}
+		else if (path.startsWith("/api/report")) {
+			downstream = REPORT;
+		}
+		else if (path.startsWith("/api/audit")) {
+			downstream = AUDIT;
+		}
+		else {
+			throw new IllegalArgumentException("Unknown path: " + path);
+		}
+		byte[] response = downstreamStatus == 501
+				? "{\"type\":\"about:blank\",\"title\":\"Not Implemented\",\"status\":501}\n".getBytes(StandardCharsets.UTF_8)
+				: "{ \"id\": \"42\", \"description\": \"Respuesta íntegra\" }\n".getBytes(StandardCharsets.UTF_8);
+		String contentType = downstreamStatus == 501 ? "application/problem+json" : "application/json;charset=UTF-8";
 		String location = path + "/created-42";
 		downstream.respond(downstreamStatus, response, downstreamStatus == 201
 				? Map.of("Content-Type", contentType, "Location", location)
@@ -379,7 +439,11 @@ class MsEventomaxBffApplicationTests {
 			result.andExpect(header().string(HttpHeaders.LOCATION, location));
 		}
 		assertThat(downstream.requests()).hasSize(1);
-		assertThat(other.requests()).isEmpty();
+		for (LocalDownstreamServer other : List.of(PRODUCTIONS, CATALOG, REPORT, AUDIT)) {
+			if (other != downstream) {
+				assertThat(other.requests()).isEmpty();
+			}
+		}
 		var captured = downstream.requests().getFirst();
 		assertThat(captured.method()).isEqualTo(method);
 		assertThat(captured.path()).isEqualTo(path);
@@ -505,7 +569,10 @@ class MsEventomaxBffApplicationTests {
 				Arguments.of("POST", "/api/catalog/services", "Admin"),
 				Arguments.of("PUT", "/api/catalog/services/42", "Admin"),
 				Arguments.of("GET", "/api/report/summary", "Admin"),
-				Arguments.of("GET", "/api/audit/events", "Auditor"));
+				Arguments.of("GET", "/api/audit/events", "Auditor"),
+				Arguments.of("GET", "/api/report/kpis", "Admin"),
+				Arguments.of("GET", "/api/report/top-services", "Admin"),
+				Arguments.of("GET", "/api/audit/timeline", "Auditor"));
 	}
 
 	@Test
@@ -586,6 +653,358 @@ class MsEventomaxBffApplicationTests {
 				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
 				.andExpect(status().isBadRequest()).andExpect(content().bytes(body))
 				.andExpect(header().string(HttpHeaders.CONTENT_TYPE, "application/json"));
+	}
+
+	@Test
+	void adminCanForwardPutEquipmentPreservingHeadersBodyAndTraces() throws Exception {
+		String traceId = "trace-equip-123";
+		String correlationId = "corr-equip-456";
+		byte[] requestBody = "{\"name\":\"Foco LED 100W\",\"description\":\"Iluminacion\",\"active\":true,\"availableQty\":12}"
+				.getBytes(StandardCharsets.UTF_8);
+		byte[] responseBody = "{\"id\":42,\"name\":\"Foco LED 100W\",\"description\":\"Iluminacion\",\"active\":true,\"availableQty\":12,\"reservedQty\":0}"
+				.getBytes(StandardCharsets.UTF_8);
+
+		CATALOG.respond(200, responseBody, Map.of(
+				"Content-Type", "application/json",
+				"X-Trace-Id", traceId,
+				"X-Correlation-Id", correlationId));
+
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Admin"));
+		this.mockMvc.perform(request(HttpMethod.PUT, "/api/catalog/equipment/42")
+				.contentType("application/json")
+				.content(requestBody)
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+				.header("X-Trace-Id", traceId)
+				.header("X-Correlation-Id", correlationId))
+				.andExpect(status().isOk())
+				.andExpect(content().bytes(responseBody))
+				.andExpect(header().string(HttpHeaders.CONTENT_TYPE, "application/json"))
+				.andExpect(header().string("X-Trace-Id", traceId))
+				.andExpect(header().string("X-Correlation-Id", correlationId));
+
+		assertThat(CATALOG.requests()).hasSize(1);
+		var captured = CATALOG.requests().getFirst();
+		assertThat(captured.method()).isEqualTo("PUT");
+		assertThat(captured.path()).isEqualTo("/api/catalog/equipment/42");
+		assertThat(captured.headers().getFirst(HttpHeaders.AUTHORIZATION)).isEqualTo("Bearer " + token);
+		assertThat(captured.headers().getFirst("X-Trace-Id")).isEqualTo(traceId);
+		assertThat(captured.headers().getFirst("X-Correlation-Id")).isEqualTo(correlationId);
+		assertThat(captured.body()).isEqualTo(requestBody);
+	}
+
+	@Test
+	void preservesCatalogEquipmentErrorResponses() throws Exception {
+		byte[] errorBody400 = "{\"error\":\"El nombre del equipo es obligatorio\"}".getBytes(StandardCharsets.UTF_8);
+		CATALOG.respond(400, errorBody400, Map.of("Content-Type", "application/json"));
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Admin"));
+
+		this.mockMvc.perform(request(HttpMethod.PUT, "/api/catalog/equipment/42")
+				.contentType("application/json")
+				.content("{\"name\":\"\",\"active\":true}".getBytes(StandardCharsets.UTF_8))
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(status().isBadRequest())
+				.andExpect(content().bytes(errorBody400))
+				.andExpect(header().string(HttpHeaders.CONTENT_TYPE, "application/json"));
+
+		byte[] errorBody404 = "{\"error\":\"Equipo no encontrado\"}".getBytes(StandardCharsets.UTF_8);
+		CATALOG.respond(404, errorBody404, Map.of("Content-Type", "application/json"));
+
+		this.mockMvc.perform(request(HttpMethod.PUT, "/api/catalog/equipment/999")
+				.contentType("application/json")
+				.content("{\"name\":\"Inexistente\",\"active\":true}".getBytes(StandardCharsets.UTF_8))
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(status().isNotFound())
+				.andExpect(content().bytes(errorBody404));
+	}
+
+	@Test
+	void anonymousCannotPutEquipment() throws Exception {
+		this.mockMvc.perform(request(HttpMethod.PUT, "/api/catalog/equipment/42")
+				.contentType("application/json")
+				.content("{\"name\":\"Test\",\"active\":true}".getBytes(StandardCharsets.UTF_8)))
+				.andExpect(status().isUnauthorized());
+		assertThat(CATALOG.requests()).isEmpty();
+	}
+
+	@Test
+	void nonAdminCannotPutEquipment() throws Exception {
+		String producerToken = ISSUER.sign(ISSUER.validClaims("access_as_user", "Productor"));
+		this.mockMvc.perform(request(HttpMethod.PUT, "/api/catalog/equipment/42")
+				.contentType("application/json")
+				.content("{\"name\":\"Test\",\"active\":true}".getBytes(StandardCharsets.UTF_8))
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + producerToken))
+				.andExpect(status().isForbidden());
+
+		String adminWithoutScope = ISSUER.sign(ISSUER.validClaims(null, "Admin"));
+		this.mockMvc.perform(request(HttpMethod.PUT, "/api/catalog/equipment/42")
+				.contentType("application/json")
+				.content("{\"name\":\"Test\",\"active\":true}".getBytes(StandardCharsets.UTF_8))
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + adminWithoutScope))
+				.andExpect(status().isForbidden());
+		assertThat(CATALOG.requests()).isEmpty();
+	}
+
+	@Test
+	void propagatesTraceAndCorrelationHeaders() throws Exception {
+		String traceId = "trace-emx96-test-123";
+		String correlationId = "corr-emx96-test-456";
+		REPORT.respond(200, "{\"status\":\"ok\"}".getBytes(StandardCharsets.UTF_8),
+				Map.of("Content-Type", "application/json", "X-Trace-Id", traceId, "X-Correlation-Id", correlationId));
+
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Admin"));
+		this.mockMvc.perform(get("/api/report/kpis")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+				.header("X-Trace-Id", traceId)
+				.header("X-Correlation-Id", correlationId))
+				.andExpect(status().isOk())
+				.andExpect(header().string("X-Trace-Id", traceId))
+				.andExpect(header().string("X-Correlation-Id", correlationId));
+
+		assertThat(REPORT.requests()).hasSize(1);
+		var captured = REPORT.requests().getFirst();
+		assertThat(captured.headers().getFirst("X-Trace-Id")).isEqualTo(traceId);
+		assertThat(captured.headers().getFirst("X-Correlation-Id")).isEqualTo(correlationId);
+	}
+
+	@Test
+	void propagatesTraceAndCorrelationHeadersOnAudit() throws Exception {
+		String traceId = "trace-audit-999";
+		String correlationId = "corr-audit-888";
+		AUDIT.respond(200, "[]".getBytes(StandardCharsets.UTF_8),
+				Map.of("Content-Type", "application/json", "X-Trace-Id", traceId, "X-Correlation-Id", correlationId));
+
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Auditor"));
+		this.mockMvc.perform(get("/api/audit/timeline")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+				.header("X-Trace-Id", traceId)
+				.header("X-Correlation-Id", correlationId))
+				.andExpect(status().isOk())
+				.andExpect(header().string("X-Trace-Id", traceId))
+				.andExpect(header().string("X-Correlation-Id", correlationId));
+
+		assertThat(AUDIT.requests()).hasSize(1);
+		var captured = AUDIT.requests().getFirst();
+		assertThat(captured.headers().getFirst("X-Trace-Id")).isEqualTo(traceId);
+		assertThat(captured.headers().getFirst("X-Correlation-Id")).isEqualTo(correlationId);
+	}
+
+	@Test
+	void preservesReportAndAuditQueryParameters() throws Exception {
+		String reportQuery = "range=last7d&extra=value%201";
+		String tokenAdmin = ISSUER.sign(ISSUER.validClaims("access_as_user", "Admin"));
+		this.mockMvc.perform(get(URI.create("/api/report/kpis?" + reportQuery))
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenAdmin)).andExpect(status().isOk());
+
+		assertThat(REPORT.requests()).hasSize(1);
+		assertThat(REPORT.requests().getFirst().query()).isEqualTo(reportQuery);
+
+		String auditQuery = "type=ProductionCreated&page=0&size=200";
+		String tokenAuditor = ISSUER.sign(ISSUER.validClaims("access_as_user", "Auditor"));
+		this.mockMvc.perform(get(URI.create("/api/audit/timeline?" + auditQuery))
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenAuditor)).andExpect(status().isOk());
+
+		assertThat(AUDIT.requests()).hasSize(1);
+		assertThat(AUDIT.requests().getFirst().query()).isEqualTo(auditQuery);
+	}
+
+	@ParameterizedTest
+	@CsvSource(textBlock = """
+			POST,   /api/report/kpis
+			PUT,    /api/report/kpis
+			DELETE, /api/report/kpis
+			HEAD,   /api/report/kpis
+			POST,   /api/report/top-services
+			PUT,    /api/report/top-services
+			DELETE, /api/report/top-services
+			HEAD,   /api/report/top-services
+			POST,   /api/audit/timeline
+			PUT,    /api/audit/timeline
+			DELETE, /api/audit/timeline
+			HEAD,   /api/audit/timeline
+			""")
+	void rejectsUnapprovedMethodsOnReportAndAuditRoutes(String method, String path) throws Exception {
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Admin", "Auditor"));
+		this.mockMvc.perform(request(HttpMethod.valueOf(method), path)
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(status().isForbidden());
+		assertThat(downstreamRequestCount()).isZero();
+	}
+
+	@Test
+	void validatesHeadAndMethodAuthorizationOnReportAndAudit() throws Exception {
+		String tokenProductor = ISSUER.sign(ISSUER.validClaims("access_as_user", "Productor"));
+		String tokenAdmin = ISSUER.sign(ISSUER.validClaims("access_as_user", "Admin"));
+		String tokenAuditor = ISSUER.sign(ISSUER.validClaims("access_as_user", "Auditor"));
+
+		// 1. HEAD /api/audit/timeline con Productor autenticado y scope válido -> 403
+		this.mockMvc.perform(request(HttpMethod.HEAD, "/api/audit/timeline")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenProductor))
+				.andExpect(status().isForbidden());
+
+		// 2. HEAD /api/report/kpis con Productor autenticado y scope válido -> 403
+		this.mockMvc.perform(request(HttpMethod.HEAD, "/api/report/kpis")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenProductor))
+				.andExpect(status().isForbidden());
+
+		// 3. HEAD de las mismas rutas con Admin -> 403 (bloqueado por denyAll para métodos no-GET)
+		this.mockMvc.perform(request(HttpMethod.HEAD, "/api/audit/timeline")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenAdmin))
+				.andExpect(status().isForbidden());
+		this.mockMvc.perform(request(HttpMethod.HEAD, "/api/report/kpis")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenAdmin))
+				.andExpect(status().isForbidden());
+
+		// 4. GET sin token -> 401
+		this.mockMvc.perform(get("/api/report/kpis"))
+				.andExpect(status().isUnauthorized());
+		this.mockMvc.perform(get("/api/audit/timeline"))
+				.andExpect(status().isUnauthorized());
+
+		// 5. GET con rol incorrecto -> 403
+		this.mockMvc.perform(get("/api/report/kpis")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenProductor))
+				.andExpect(status().isForbidden());
+		this.mockMvc.perform(get("/api/audit/timeline")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenProductor))
+				.andExpect(status().isForbidden());
+
+		// 6. GET con rol correcto -> 200
+		REPORT.respond(200, "{\"kpis\":\"ok\"}".getBytes(StandardCharsets.UTF_8), Map.of("Content-Type", "application/json"));
+		this.mockMvc.perform(get("/api/report/kpis")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenAdmin))
+				.andExpect(status().isOk());
+
+		AUDIT.respond(200, "[]".getBytes(StandardCharsets.UTF_8), Map.of("Content-Type", "application/json"));
+		this.mockMvc.perform(get("/api/audit/timeline")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenAdmin))
+				.andExpect(status().isOk());
+		this.mockMvc.perform(get("/api/audit/timeline")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + tokenAuditor))
+				.andExpect(status().isOk());
+
+		// 7. CORS OPTIONS sigue permitido sin autenticación
+		this.mockMvc.perform(request(HttpMethod.OPTIONS, "/api/report/kpis")
+				.header(HttpHeaders.ORIGIN, "http://localhost:4200")
+				.header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET")
+				.header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "authorization,content-type"))
+				.andExpect(status().is2xxSuccessful());
+		this.mockMvc.perform(request(HttpMethod.OPTIONS, "/api/audit/timeline")
+				.header(HttpHeaders.ORIGIN, "http://localhost:4200")
+				.header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET")
+				.header(HttpHeaders.ACCESS_CONTROL_REQUEST_HEADERS, "authorization,content-type"))
+				.andExpect(status().is2xxSuccessful());
+	}
+
+	@Test
+	void preservesReportDownstreamErrors() throws Exception {
+		byte[] problemBody = "{\"type\":\"about:blank\",\"title\":\"Bad Request\",\"status\":400}".getBytes(StandardCharsets.UTF_8);
+		REPORT.respond(400, problemBody, Map.of("Content-Type", "application/problem+json"));
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Admin"));
+		this.mockMvc.perform(get("/api/report/kpis?range=invalid")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(status().isBadRequest())
+				.andExpect(content().bytes(problemBody))
+				.andExpect(header().string(HttpHeaders.CONTENT_TYPE, "application/problem+json"));
+	}
+
+	@Test
+	void preservesAuditDownstreamInternalError() throws Exception {
+		byte[] errorBody = "{\"error\":\"database down\"}".getBytes(StandardCharsets.UTF_8);
+		AUDIT.respond(500, errorBody, Map.of("Content-Type", "application/json"));
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Auditor"));
+		this.mockMvc.perform(get("/api/audit/timeline")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(status().isInternalServerError())
+				.andExpect(content().bytes(errorBody))
+				.andExpect(header().string(HttpHeaders.CONTENT_TYPE, "application/json"));
+	}
+
+	@Test
+	void organizerCanAccessOwnProductionReservations() throws Exception {
+		PRODUCTIONS.respond(200, "{\"id\":42,\"organizerId\":\"org-alpha\"}".getBytes(StandardCharsets.UTF_8),
+				Map.of("Content-Type", "application/json"));
+		byte[] reservationsJson = "[{\"reservationId\":1,\"equipmentId\":10,\"quantity\":2,\"status\":\"RESERVED\"}]"
+				.getBytes(StandardCharsets.UTF_8);
+		CATALOG.respond(200, reservationsJson, Map.of("Content-Type", "application/json"));
+
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Organizador")
+				.claim("tid", "tenant-alpha").claim("oid", "org-alpha"));
+
+		this.mockMvc.perform(get("/api/catalog/reservations/production/42")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(status().isOk())
+				.andExpect(content().bytes(reservationsJson));
+
+		assertThat(PRODUCTIONS.requests()).hasSize(1);
+		assertThat(PRODUCTIONS.requests().get(0).path()).isEqualTo("/api/productions/42");
+		assertThat(CATALOG.requests()).hasSize(1);
+		assertThat(CATALOG.requests().get(0).path()).isEqualTo("/api/catalog/reservations/production/42");
+	}
+
+	@Test
+	void organizerDeniedAccessToOtherOrganizerProductionReservations() throws Exception {
+		PRODUCTIONS.respond(403, "{\"message\":\"Forbidden\"}".getBytes(StandardCharsets.UTF_8),
+				Map.of("Content-Type", "application/json"));
+
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Organizador")
+				.claim("tid", "tenant-alpha").claim("oid", "org-alpha"));
+
+		this.mockMvc.perform(get("/api/catalog/reservations/production/99")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(status().isForbidden());
+
+		assertThat(PRODUCTIONS.requests()).hasSize(1);
+		assertThat(PRODUCTIONS.requests().get(0).path()).isEqualTo("/api/productions/99");
+		assertThat(CATALOG.requests()).isEmpty();
+	}
+
+	@Test
+	void organizerGets404WhenProductionDoesNotExist() throws Exception {
+		PRODUCTIONS.respond(404, "{\"message\":\"Not Found\"}".getBytes(StandardCharsets.UTF_8),
+				Map.of("Content-Type", "application/json"));
+
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Organizador"));
+
+		this.mockMvc.perform(get("/api/catalog/reservations/production/999")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(status().isNotFound());
+
+		assertThat(CATALOG.requests()).isEmpty();
+	}
+
+	@Test
+	void adminAndProducerBypassOwnershipCheck() throws Exception {
+		byte[] reservationsJson = "[{\"reservationId\":2}]".getBytes(StandardCharsets.UTF_8);
+		CATALOG.respond(200, reservationsJson, Map.of("Content-Type", "application/json"));
+
+		String adminToken = ISSUER.sign(ISSUER.validClaims("access_as_user", "Admin"));
+		this.mockMvc.perform(get("/api/catalog/reservations/production/55")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + adminToken))
+				.andExpect(status().isOk())
+				.andExpect(content().bytes(reservationsJson));
+
+		assertThat(PRODUCTIONS.requests()).isEmpty();
+
+		String producerToken = ISSUER.sign(ISSUER.validClaims("access_as_user", "Productor"));
+		this.mockMvc.perform(get("/api/catalog/reservations/production/55")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + producerToken))
+				.andExpect(status().isOk());
+
+		assertThat(PRODUCTIONS.requests()).isEmpty();
+	}
+
+	@Test
+	void anonymousCannotAccessReservations() throws Exception {
+		this.mockMvc.perform(get("/api/catalog/reservations/production/42"))
+				.andExpect(status().isUnauthorized());
+	}
+
+	@Test
+	void auditorCannotAccessReservations() throws Exception {
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Auditor"));
+		this.mockMvc.perform(get("/api/catalog/reservations/production/42")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(status().isForbidden());
 	}
 
 	@RestController

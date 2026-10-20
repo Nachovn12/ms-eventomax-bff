@@ -6,6 +6,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -39,6 +40,24 @@ public class ProductionsRoutingController {
 	@PutMapping("/{id}/status")
 	ResponseEntity<byte[]> updateStatus(HttpServletRequest request) throws IOException {
 		return this.client.productions(HttpMethod.PUT, request);
+	}
+
+	@GetMapping("/{id}/crew-ticket")
+	ResponseEntity<byte[]> getCrewTicket(@PathVariable("id") Long id, HttpServletRequest request) {
+		var check = this.client.checkProductionOwnership(id, request);
+		if (!check.getStatusCode().is2xxSuccessful()) {
+			return check;
+		}
+		return this.client.notifyTicket(id, request);
+	}
+
+	@GetMapping("/{id}/quote-pdf")
+	ResponseEntity<byte[]> getQuotePdf(@PathVariable("id") Long id, HttpServletRequest request) {
+		var check = this.client.checkProductionOwnership(id, request);
+		if (!check.getStatusCode().is2xxSuccessful()) {
+			return check;
+		}
+		return this.client.notifyQuotePdf(id, request);
 	}
 
 }
