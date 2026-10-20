@@ -32,6 +32,11 @@ public class ProductionsRoutingController {
 		return this.client.productions(HttpMethod.GET, request);
 	}
 
+	@GetMapping("/{id}/services")
+	ResponseEntity<byte[]> getServices(HttpServletRequest request) throws IOException {
+		return this.client.productions(HttpMethod.GET, request);
+	}
+
 	@GetMapping
 	ResponseEntity<byte[]> list(HttpServletRequest request) throws IOException {
 		return this.client.productions(HttpMethod.GET, request);
@@ -40,6 +45,11 @@ public class ProductionsRoutingController {
 	@PutMapping("/{id}/status")
 	ResponseEntity<byte[]> updateStatus(HttpServletRequest request) throws IOException {
 		return this.client.productions(HttpMethod.PUT, request);
+	}
+
+	@PostMapping("/{id}/quote-command/republish")
+	ResponseEntity<byte[]> republishQuoteCommand(HttpServletRequest request) throws IOException {
+		return this.client.productions(HttpMethod.POST, request);
 	}
 
 	@GetMapping("/{id}/crew-ticket")
