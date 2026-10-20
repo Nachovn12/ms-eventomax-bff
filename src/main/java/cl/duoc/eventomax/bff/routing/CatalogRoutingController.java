@@ -26,6 +26,11 @@ public class CatalogRoutingController {
 		return this.client.catalog(HttpMethod.GET, request);
 	}
 
+	@GetMapping("/{id}")
+	ResponseEntity<byte[]> getById(HttpServletRequest request) throws IOException {
+		return this.client.catalog(HttpMethod.GET, request);
+	}
+
 	@PostMapping
 	ResponseEntity<byte[]> create(HttpServletRequest request) throws IOException {
 		return this.client.catalog(HttpMethod.POST, request);

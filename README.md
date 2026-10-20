@@ -52,7 +52,7 @@ flowchart LR
 | Web / Cliente HTTP | `spring-boot-starter-webmvc` (`RestClient` con timeouts explícitos) | Boot `4.1.1` |
 | Seguridad | `spring-boot-starter-security` + `oauth2-resource-server` | Boot `4.1.1` |
 | Observabilidad | `spring-boot-starter-actuator` + OpenAPI (`springdoc`) | `3.0.3` |
-| Testing | JUnit 5 (`@ParameterizedTest` matriz RBAC de 230 casos), MockMvc | Boot `4.1.1` |
+| Testing | JUnit 5 (`@ParameterizedTest` matriz RBAC de 255 casos), MockMvc | Boot `4.1.1` |
 
 ---
 
@@ -61,7 +61,7 @@ flowchart LR
 | Criterio de Evaluación EP2 | Implementación en `ms-eventomax-bff` | Estado |
 |---|---|---|
 | **Autenticación Microsoft Entra ID y Autorización RBAC** | Validación de `issuer-uri`, `AudienceValidator`, scope `access_as_user` y roles `Admin`, `Productor`, `Organizador`, `Auditor` (`EntraJwtAuthoritiesConverter`). | **CUMPLIDO** |
-| **Integración con Artefactos RabbitMQ / Notify** | Enrutamiento seguro de `GET /api/productions/{id}/quote-pdf` y `GET /api/productions/{id}/crew-ticket` hacia `ms-eventomax-notify` previa validación de propiedad de la producción. | **CUMPLIDO** |
+| **Integración con Artefactos RabbitMQ / Notify** | Enrutamiento seguro de `GET /api/productions/{id}/quote-pdf`, `GET /api/productions/{id}/crew-ticket` y `POST /api/productions/{id}/quote-command/republish`. | **CUMPLIDO** |
 | **Enrutamiento hacia Rabbit Admin (`AmqpAdmin`)** | `RabbitAdminRoutingController` expone `/api/rabbit-admin/**` exclusivamente al rol `Admin` (`scopeAndAnyRole(ADMIN)`). | **CUMPLIDO** |
 | **Trazabilidad y Manejo de Errores Downstream** | Propagación de `X-Trace-Id`, `X-Correlation-Id`, `Content-Disposition` y traducción de fallos de red/timeout a `502 Bad Gateway` / `504 Gateway Timeout`. | **CUMPLIDO** |
 
@@ -73,19 +73,18 @@ Todas las rutas `/api/**` exigen `SCOPE_access_as_user`:
 
 | Método | Ruta Expuesta en BFF | Destino Downstream | Roles Permitidos |
 |---|---|---|---|
-| `GET` | `/api/productions/**` | `ms-eventomax-productions` | `Admin`, `Productor`, `Organizador` |
-| `POST` | `/api/productions` | `ms-eventomax-productions` | `Admin`, `Organizador` |
-| `PUT` | `/api/productions/*/status` | `ms-eventomax-productions` | `Admin`, `Productor` |
-| `POST`, `DELETE` | `/api/productions/*/services/**` | `ms-eventomax-productions` | `Admin`, `Productor`, `Organizador` |
+| `GET` | `/api/productions`, `/api/productions/{id}`, `/api/productions/{id}/services` | `ms-eventomax-productions` | `Admin`, `Productor`, `Organizador` |
+| `POST` | `/api/productions` | `ms-eventomax-productions` | `Productor`, `Organizador` |
+| `PUT` | `/api/productions/{id}/status` | `ms-eventomax-productions` | `Admin`, `Productor` |
+| `POST` | `/api/productions/{id}/quote-command/republish` | `ms-eventomax-productions` | `Admin`, `Productor` |
 | `GET` | `/api/productions/{id}/crew-ticket` | `ms-eventomax-productions` (check) → `ms-eventomax-notify` | `Admin`, `Productor` |
 | `GET` | `/api/productions/{id}/quote-pdf` | `ms-eventomax-productions` (check) → `ms-eventomax-notify` | `Admin`, `Productor`, `Organizador` |
 | `GET` | `/api/organizers/{organizerId}/contact` | `ms-eventomax-productions` | `Admin`, `Productor`, `Organizador` |
 | `PUT` | `/api/organizers/{organizerId}/contact` | `ms-eventomax-productions` | `Admin`, `Organizador` |
-| `GET` | `/api/catalog/services/**`, `/api/catalog/equipment/**` | `ms-eventomax-catalog` | `Admin`, `Productor`, `Organizador` |
+| `GET` | `/api/catalog/services`, `/api/catalog/services/{id}`, `/api/catalog/equipment` | `ms-eventomax-catalog` | `Admin`, `Productor` |
 | `POST`, `PUT` | `/api/catalog/services/**`, `/api/catalog/equipment/**` | `ms-eventomax-catalog` | `Admin` |
-| `GET` | `/api/catalog/reservations/productions/*` | `ms-eventomax-productions` (check) → `ms-eventomax-catalog` | `Admin`, `Productor`, `Organizador` |
-| `POST` | `/api/catalog/reservations/**` | `ms-eventomax-catalog` | `Admin`, `Productor` |
-| `GET` | `/api/report/kpis`, `/api/report/top-services` | `ms-eventomax-report` | `Admin`, `Auditor` |
+| `GET` | `/api/catalog/reservations/production/{productionId}` | `ms-eventomax-productions` (check) → `ms-eventomax-catalog` | `Admin`, `Productor`, `Organizador` |
+| `GET` | `/api/report/kpis`, `/api/report/top-services` | `ms-eventomax-report` | `Admin` |
 | `GET` | `/api/audit/timeline` | `ms-eventomax-audit` | `Admin`, `Auditor` |
 | `GET`, `POST`, `DELETE` | `/api/rabbit-admin/**` | `ms-eventomax-rabbit-admin` | `Admin` |
 
@@ -95,17 +94,16 @@ Todas las rutas `/api/**` exigen `SCOPE_access_as_user`:
 
 - **Issuer:** `https://login.microsoftonline.com/f191bdc8-7926-4722-9ec0-cba663701940/v2.0` (`ENTRA_ISSUER_URI`).
 - **Audience:** `api://a1a87bcd-fed7-4d65-83c3-338389b80093` (`ENTRA_AUDIENCE`).
-- **Regla Deny-by-Default:** Cualquier ruta no declarada explícitamente en `SecurityConfiguration` es rechazada con `.anyRequest().denyAll()`.
-- **Respuestas Determinísticas:** `401 Unauthorized` para tokens ausentes/inválidos y `403 Forbidden` (`application/problem+json`) para roles o scopes insuficientes.
+- **Respuestas Determinísticas:** `401 Unauthorized` para tokens ausentes/inválidos y `403 Forbidden` para roles o scopes insuficientes.
 
 ---
 
 ## 7. Integración con RabbitMQ y Kafka (Rol de Pasarela)
 
 El BFF no se conecta directamente a los brokers AMQP/Kafka, sino que expone de forma autenticada:
-- La descarga de los artefactos generados asíncronamente por RabbitMQ en `ms-eventomax-notify` (`/crew-ticket` y `/quote-pdf`).
+- La descarga de los artefactos generados asíncronamente por RabbitMQ en `ms-eventomax-notify` (`/crew-ticket` y `/quote-pdf`) y la republicación segura del comando de acta (`/quote-command/republish`).
 - La administración programática de colas, exchanges y bindings (`demo.*`) hacia `rabbit-admin` (`/api/rabbit-admin/**`).
-- Las consultas sobre las proyecciones Kafka de `ms-eventomax-report` y `ms-eventomax-audit`.
+- Las consultas sobre las proyecciones de `ms-eventomax-report` y `ms-eventomax-audit`.
 
 ---
 
@@ -152,10 +150,10 @@ mvn spring-boot:run
 ## 11. Ejecución de Pruebas Automatizadas
 
 ```bash
-mvn clean test
+mvn clean verify
 ```
 
-**Resultado certificado en EP2:** `Tests run: 230, Failures: 0, Errors: 0, Skipped: 0 — BUILD SUCCESS`.
+**Resultado certificado en EP2:** `Tests run: 255, Failures: 0, Errors: 0, Skipped: 0 — BUILD SUCCESS`.
 
 ---
 
@@ -163,8 +161,10 @@ mvn clean test
 
 ```bash
 docker build -t ms-eventomax-bff:ep2 .
-docker compose -f docker-compose.prod.yml up -d --build
+docker compose --env-file .env.prod -f docker-compose.prod.yml up -d --build
 ```
+
+Presupuesto de memoria configurado en `docker-compose.prod.yml`: `mem_limit: 640m` con `MaxRAMPercentage=65.0` y `HEALTHCHECK` activo contra `/actuator/health`.
 
 ---
 
@@ -190,6 +190,7 @@ ms-eventomax-bff/
 │       └── SecurityConfiguration.java
 ├── src/main/resources/application.yaml
 ├── Dockerfile
+├── .env.prod.example
 └── docker-compose.prod.yml
 ```
 
@@ -197,5 +198,5 @@ ms-eventomax-bff/
 
 ## 14. Estado Actual de Certificación EP2 y Trazabilidad Jira
 
-- **Pruebas Automatizadas:** `230/230` aprobadas.
-- **Historias Jira:** `EMX-72` (Rutas Audit/Report), `EMX-Bloque-1A` (Equipos y Reservas), `EP2-FIX-01` (Rutas Notify Quote PDF, Crew Ticket, Contactos de Organizador y Rabbit Admin).
+- **Pruebas Automatizadas:** `255/255` aprobadas.
+- **Historias Jira:** `EMX-72` (Rutas Audit/Report), `EMX-Bloque-1A` (Equipos y Reservas), `EP2-FIX-01` y `fix/ep2-final-aws-readiness` (Rutas Notify Quote PDF, Crew Ticket, Servicios Contratados, Republicación de Acta, Detalle de Servicio de Catálogo y Rabbit Admin).

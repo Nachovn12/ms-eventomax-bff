@@ -52,6 +52,8 @@ public class SecurityConfiguration {
 								.access(scopeAndAnyRole(ADMIN, PRODUCER))
 						.requestMatchers(HttpMethod.GET, "/api/productions/{id}/quote-pdf")
 								.access(scopeAndAnyRole(ADMIN, PRODUCER, ORGANIZER))
+						.requestMatchers(HttpMethod.POST, "/api/productions/{id}/quote-command/republish")
+								.access(scopeAndAnyRole(ADMIN, PRODUCER))
 						.requestMatchers(HttpMethod.GET, "/api/organizers/{organizerId}/contact")
 								.access(scopeAndAnyRole(ADMIN, PRODUCER, ORGANIZER))
 						.requestMatchers(HttpMethod.PUT, "/api/organizers/{organizerId}/contact")
