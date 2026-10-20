@@ -23,7 +23,7 @@ public class DomainRoutingClient {
 			List.of(HttpHeaders.AUTHORIZATION, HttpHeaders.CONTENT_TYPE, HttpHeaders.ACCEPT,
 					TRACE_ID_HEADER, CORRELATION_ID_HEADER);
 	private static final List<String> RESPONSE_HEADERS =
-			List.of(HttpHeaders.CONTENT_TYPE, HttpHeaders.LOCATION,
+			List.of(HttpHeaders.CONTENT_TYPE, HttpHeaders.LOCATION, HttpHeaders.CONTENT_DISPOSITION,
 					TRACE_ID_HEADER, CORRELATION_ID_HEADER);
 
 	private final RestClient client;
@@ -31,14 +31,32 @@ public class DomainRoutingClient {
 	private final String catalogBaseUrl;
 	private final String reportBaseUrl;
 	private final String auditBaseUrl;
+	private final String notifyBaseUrl;
+	private final String rabbitAdminBaseUrl;
 
 	public DomainRoutingClient(RestClient client, URI productionsBaseUrl, URI catalogBaseUrl,
 			URI reportBaseUrl, URI auditBaseUrl) {
+		this(client, productionsBaseUrl, catalogBaseUrl, reportBaseUrl, auditBaseUrl, productionsBaseUrl);
+	}
+
+	public DomainRoutingClient(RestClient client, URI productionsBaseUrl, URI catalogBaseUrl,
+			URI reportBaseUrl, URI auditBaseUrl, URI notifyBaseUrl) {
+		this(client, productionsBaseUrl, catalogBaseUrl, reportBaseUrl, auditBaseUrl, notifyBaseUrl, productionsBaseUrl);
+	}
+
+	public DomainRoutingClient(RestClient client, URI productionsBaseUrl, URI catalogBaseUrl,
+			URI reportBaseUrl, URI auditBaseUrl, URI notifyBaseUrl, URI rabbitAdminBaseUrl) {
 		this.client = client;
 		this.productionsBaseUrl = baseUrl(productionsBaseUrl);
 		this.catalogBaseUrl = baseUrl(catalogBaseUrl);
 		this.reportBaseUrl = baseUrl(reportBaseUrl);
 		this.auditBaseUrl = baseUrl(auditBaseUrl);
+		this.notifyBaseUrl = baseUrl(notifyBaseUrl);
+		this.rabbitAdminBaseUrl = baseUrl(rabbitAdminBaseUrl);
+	}
+
+	ResponseEntity<byte[]> rabbitAdmin(HttpMethod method, HttpServletRequest request) throws IOException {
+		return forward(this.rabbitAdminBaseUrl, method, request);
 	}
 
 	ResponseEntity<byte[]> productions(HttpMethod method, HttpServletRequest request) throws IOException {
@@ -57,9 +75,27 @@ public class DomainRoutingClient {
 		return forward(this.auditBaseUrl, method, request);
 	}
 
+	ResponseEntity<byte[]> notify(HttpMethod method, HttpServletRequest request) throws IOException {
+		return forward(this.notifyBaseUrl, method, request);
+	}
+
 	public ResponseEntity<byte[]> checkProductionOwnership(Long productionId, HttpServletRequest incoming) {
 		URI target = URI.create(this.productionsBaseUrl + "/api/productions/" + productionId);
-		var outgoing = this.client.method(HttpMethod.GET).uri(target).headers(headers -> {
+		return forwardDirect(target, HttpMethod.GET, incoming);
+	}
+
+	public ResponseEntity<byte[]> notifyTicket(Long productionId, HttpServletRequest incoming) {
+		URI target = URI.create(this.notifyBaseUrl + "/api/notify/tickets/" + productionId);
+		return forwardDirect(target, HttpMethod.GET, incoming);
+	}
+
+	public ResponseEntity<byte[]> notifyQuotePdf(Long productionId, HttpServletRequest incoming) {
+		URI target = URI.create(this.notifyBaseUrl + "/api/notify/quotes/" + productionId + "/pdf");
+		return forwardDirect(target, HttpMethod.GET, incoming);
+	}
+
+	private ResponseEntity<byte[]> forwardDirect(URI target, HttpMethod method, HttpServletRequest incoming) {
+		var outgoing = this.client.method(method).uri(target).headers(headers -> {
 			for (String name : REQUEST_HEADERS) {
 				var values = Collections.list(incoming.getHeaders(name));
 				if (!values.isEmpty()) {

@@ -13,8 +13,11 @@ services:
       CATALOG_BASE_URL: ${CATALOG_BASE_URL:?CATALOG_BASE_URL is required}
       REPORT_BASE_URL: ${REPORT_BASE_URL:?REPORT_BASE_URL is required}
       AUDIT_BASE_URL: ${AUDIT_BASE_URL:?AUDIT_BASE_URL is required}
+      NOTIFY_BASE_URL: ${NOTIFY_BASE_URL:-http://ms-eventomax-notify:8080}
+      RABBIT_ADMIN_BASE_URL: ${RABBIT_ADMIN_BASE_URL:-http://ms-eventomax-rabbit-admin:8080}
       DOWNSTREAM_CONNECT_TIMEOUT: ${DOWNSTREAM_CONNECT_TIMEOUT:-3s}
       DOWNSTREAM_READ_TIMEOUT: ${DOWNSTREAM_READ_TIMEOUT:-10s}
+      JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:--XX:InitialRAMPercentage=25.0 -XX:MaxRAMPercentage=65.0 -XX:+ExitOnOutOfMemoryError}
     networks:
       - eventomax-net
 

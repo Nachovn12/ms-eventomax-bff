@@ -41,6 +41,14 @@ class DomainRoutingClientTests {
 			var auditResponse = client.audit(HttpMethod.GET, new MockHttpServletRequest("GET", "/api/audit/timeline"));
 			assertThat(auditResponse.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
 			assertThat(auditResponse.getBody()).isNull();
+
+			var ticketResponse = client.notifyTicket(42L, new MockHttpServletRequest("GET", "/api/productions/42/crew-ticket"));
+			assertThat(ticketResponse.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
+			assertThat(ticketResponse.getBody()).isNull();
+
+			var quoteResponse = client.notifyQuotePdf(42L, new MockHttpServletRequest("GET", "/api/productions/42/quote-pdf"));
+			assertThat(quoteResponse.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
+			assertThat(quoteResponse.getBody()).isNull();
 		}
 	}
 
@@ -58,6 +66,8 @@ class DomainRoutingClientTests {
 				new DomainRoutingClient(client, valid, valid, URI.create(value), valid));
 		assertThatIllegalArgumentException().isThrownBy(() ->
 				new DomainRoutingClient(client, valid, valid, valid, URI.create(value)));
+		assertThatIllegalArgumentException().isThrownBy(() ->
+				new DomainRoutingClient(client, valid, valid, valid, valid, URI.create(value)));
 	}
 
 	@ParameterizedTest
