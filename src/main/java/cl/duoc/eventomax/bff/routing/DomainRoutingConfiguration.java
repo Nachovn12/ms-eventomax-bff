@@ -38,11 +38,12 @@ public class DomainRoutingConfiguration {
 			@Value("${eventomax.downstream.report-base-url}") URI reportBaseUrl,
 			@Value("${eventomax.downstream.audit-base-url}") URI auditBaseUrl,
 			@Value("${eventomax.downstream.notify-base-url:http://localhost:8083}") URI notifyBaseUrl,
-			@Value("${eventomax.downstream.rabbit-admin-base-url:http://localhost:8086}") URI rabbitAdminBaseUrl) {
+			@Value("${eventomax.downstream.rabbit-admin-base-url:http://localhost:8086}") URI rabbitAdminBaseUrl,
+			@Value("${eventomax.downstream.kafka-admin-base-url:http://localhost:8088}") URI kafkaAdminBaseUrl) {
 		// Use Boot's builder when available, without requiring another starter.
 		RestClient client = builders.getIfAvailable(RestClient::builder).clone()
 				.requestFactory(domainRequestFactory).build();
-		return new DomainRoutingClient(client, productionsBaseUrl, catalogBaseUrl, reportBaseUrl, auditBaseUrl, notifyBaseUrl, rabbitAdminBaseUrl);
+		return new DomainRoutingClient(client, productionsBaseUrl, catalogBaseUrl, reportBaseUrl, auditBaseUrl, notifyBaseUrl, rabbitAdminBaseUrl, kafkaAdminBaseUrl);
 	}
 
 }

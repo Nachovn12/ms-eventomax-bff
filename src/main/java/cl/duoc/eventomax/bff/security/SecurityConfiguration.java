@@ -48,6 +48,7 @@ public class SecurityConfiguration {
 						.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 						.requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/info").permitAll()
 						.requestMatchers("/api/rabbit-admin/**").access(scopeAndAnyRole(ADMIN))
+						.requestMatchers("/api/kafka-admin/**").access(scopeAndAnyRole(ADMIN))
 						.requestMatchers(HttpMethod.GET, "/api/productions/{id}/crew-ticket")
 								.access(scopeAndAnyRole(ADMIN, PRODUCER))
 						.requestMatchers(HttpMethod.GET, "/api/productions/{id}/quote-pdf")

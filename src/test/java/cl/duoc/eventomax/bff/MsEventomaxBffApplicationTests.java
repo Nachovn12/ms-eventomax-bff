@@ -63,6 +63,7 @@ class MsEventomaxBffApplicationTests {
 		registry.add("CATALOG_BASE_URL", CATALOG::baseUrl);
 		registry.add("REPORT_BASE_URL", REPORT::baseUrl);
 		registry.add("AUDIT_BASE_URL", AUDIT::baseUrl);
+		registry.add("KAFKA_ADMIN_BASE_URL", PRODUCTIONS::baseUrl);
 	}
 
 	@BeforeEach
@@ -1005,6 +1006,29 @@ class MsEventomaxBffApplicationTests {
 		this.mockMvc.perform(get("/api/catalog/reservations/production/42")
 				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
 				.andExpect(status().isForbidden());
+	}
+
+	@Test
+	void adminCanAccessKafkaAdminTopics() throws Exception {
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Admin"));
+		this.mockMvc.perform(get("/api/kafka-admin/topics")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(status().isOk());
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "Productor", "Organizador", "Auditor" })
+	void nonAdminForbiddenKafkaAdmin(String role) throws Exception {
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", role));
+		this.mockMvc.perform(get("/api/kafka-admin/topics")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(status().isForbidden());
+	}
+
+	@Test
+	void anonymousForbiddenKafkaAdmin() throws Exception {
+		this.mockMvc.perform(get("/api/kafka-admin/topics"))
+				.andExpect(status().isUnauthorized());
 	}
 
 	@RestController
