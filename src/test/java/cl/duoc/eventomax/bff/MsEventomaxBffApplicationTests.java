@@ -202,6 +202,14 @@ class MsEventomaxBffApplicationTests {
 			GET,  /api/productions/42,        Productor,   200
 			GET,  /api/productions/42,        Organizador, 200
 			GET,  /api/productions/42,        Auditor,     403
+			GET,  /api/productions/42/services, Admin,       200
+			GET,  /api/productions/42/services, Productor,   200
+			GET,  /api/productions/42/services, Organizador, 200
+			GET,  /api/productions/42/services, Auditor,     403
+			POST, /api/productions/42/quote-command/republish, Admin,       200
+			POST, /api/productions/42/quote-command/republish, Productor,   200
+			POST, /api/productions/42/quote-command/republish, Organizador, 403
+			POST, /api/productions/42/quote-command/republish, Auditor,     403
 			POST, /api/productions,           Admin,       403
 			POST, /api/productions,           Productor,   200
 			POST, /api/productions,           Organizador, 200
@@ -214,6 +222,10 @@ class MsEventomaxBffApplicationTests {
 			GET,  /api/catalog/services,      Productor,   200
 			GET,  /api/catalog/services,      Organizador, 403
 			GET,  /api/catalog/services,      Auditor,     403
+			GET,  /api/catalog/services/42,   Admin,       200
+			GET,  /api/catalog/services/42,   Productor,   200
+			GET,  /api/catalog/services/42,   Organizador, 403
+			GET,  /api/catalog/services/42,   Auditor,     403
 			POST, /api/catalog/services,      Admin,       200
 			POST, /api/catalog/services,      Productor,   403
 			POST, /api/catalog/services,      Organizador, 403
@@ -383,9 +395,12 @@ class MsEventomaxBffApplicationTests {
 	@CsvSource(textBlock = """
 			POST, /api/productions, Organizador, 201
 			GET, /api/productions/42, Productor, 200
+			GET, /api/productions/42/services, Productor, 200
+			POST, /api/productions/42/quote-command/republish, Productor, 200
 			GET, /api/productions, Productor, 200
 			PUT, /api/productions/42/status, Productor, 202
 			GET, /api/catalog/services, Productor, 200
+			GET, /api/catalog/services/42, Productor, 200
 			POST, /api/catalog/services, Admin, 201
 			PUT, /api/catalog/services/service-42, Admin, 200
 			GET, /api/catalog/equipment, Productor, 200
@@ -563,9 +578,12 @@ class MsEventomaxBffApplicationTests {
 	private static Stream<Arguments> domainRequests() {
 		return Stream.of(
 				Arguments.of("GET", "/api/productions/42", "Productor"),
+				Arguments.of("GET", "/api/productions/42/services", "Productor"),
+				Arguments.of("POST", "/api/productions/42/quote-command/republish", "Productor"),
 				Arguments.of("POST", "/api/productions", "Organizador"),
 				Arguments.of("PUT", "/api/productions/42/status", "Productor"),
 				Arguments.of("GET", "/api/catalog/services", "Productor"),
+				Arguments.of("GET", "/api/catalog/services/42", "Productor"),
 				Arguments.of("POST", "/api/catalog/services", "Admin"),
 				Arguments.of("PUT", "/api/catalog/services/42", "Admin"),
 				Arguments.of("GET", "/api/report/summary", "Admin"),
@@ -1005,6 +1023,26 @@ class MsEventomaxBffApplicationTests {
 		this.mockMvc.perform(get("/api/catalog/reservations/production/42")
 				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
 				.andExpect(status().isForbidden());
+	}
+
+	@Test
+	void preservesRepublishConflictAndServiceNotFoundFromDownstreams() throws Exception {
+		byte[] conflictBody = "{\"status\":409,\"message\":\"Solo se puede republicar en estado CERRADO\"}".getBytes(StandardCharsets.UTF_8);
+		PRODUCTIONS.respond(409, conflictBody, Map.of("Content-Type", "application/json"));
+		String producerToken = ISSUER.sign(ISSUER.validClaims("access_as_user", "Productor"));
+
+		this.mockMvc.perform(post("/api/productions/42/quote-command/republish")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + producerToken))
+				.andExpect(status().isConflict())
+				.andExpect(content().bytes(conflictBody));
+
+		byte[] notFoundBody = "{\"status\":404,\"message\":\"Servicio no encontrado\"}".getBytes(StandardCharsets.UTF_8);
+		CATALOG.respond(404, notFoundBody, Map.of("Content-Type", "application/json"));
+
+		this.mockMvc.perform(get("/api/catalog/services/999")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + producerToken))
+				.andExpect(status().isNotFound())
+				.andExpect(content().bytes(notFoundBody));
 	}
 
 	@RestController
