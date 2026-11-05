@@ -1016,6 +1016,38 @@ class MsEventomaxBffApplicationTests {
 				.andExpect(status().isOk());
 	}
 
+	@Test
+	void adminCanUpdateKafkaAdminTopicConfigsAndPartitions() throws Exception {
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Admin"));
+		this.mockMvc.perform(request(HttpMethod.PUT, "/api/kafka-admin/topics/demo.topic/configs")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+				.header(HttpHeaders.CONTENT_TYPE, "application/json")
+				.content("{\"configs\":{\"retention.ms\":\"86400000\"}}"))
+				.andExpect(status().isOk());
+
+		this.mockMvc.perform(request(HttpMethod.PUT, "/api/kafka-admin/topics/demo.topic/partitions")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+				.header(HttpHeaders.CONTENT_TYPE, "application/json")
+				.content("{\"totalPartitions\":6}"))
+				.andExpect(status().isOk());
+
+		assertThat(PRODUCTIONS.requests()).hasSize(2);
+	}
+
+	@Test
+	void adminCanAccessAndDeleteKafkaConsumerGroups() throws Exception {
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Admin"));
+		this.mockMvc.perform(get("/api/kafka-admin/consumer-groups")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(status().isOk());
+
+		this.mockMvc.perform(request(HttpMethod.DELETE, "/api/kafka-admin/consumer-groups/demo-group")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(status().isOk());
+
+		assertThat(PRODUCTIONS.requests()).hasSize(2);
+	}
+
 	@ParameterizedTest
 	@ValueSource(strings = { "Productor", "Organizador", "Auditor" })
 	void nonAdminForbiddenKafkaAdmin(String role) throws Exception {

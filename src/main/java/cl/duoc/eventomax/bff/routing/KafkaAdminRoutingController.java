@@ -16,8 +16,8 @@ public class KafkaAdminRoutingController {
         this.client = client;
     }
 
-    @GetMapping({"/topics", "/topics/{name}"})
-    ResponseEntity<byte[]> getTopics(HttpServletRequest request) throws IOException {
+    @GetMapping({"/topics", "/topics/{name}", "/consumer-groups", "/consumer-groups/{groupId}"})
+    ResponseEntity<byte[]> getResources(HttpServletRequest request) throws IOException {
         return client.kafkaAdmin(HttpMethod.GET, request);
     }
 
@@ -26,9 +26,13 @@ public class KafkaAdminRoutingController {
         return client.kafkaAdmin(HttpMethod.POST, request);
     }
 
-    @DeleteMapping("/topics/{name}")
-    ResponseEntity<byte[]> deleteTopic(HttpServletRequest request) throws IOException {
+    @PutMapping({"/topics/{name}/configs", "/topics/{name}/partitions"})
+    ResponseEntity<byte[]> updateTopic(HttpServletRequest request) throws IOException {
+        return client.kafkaAdmin(HttpMethod.PUT, request);
+    }
+
+    @DeleteMapping({"/topics/{name}", "/consumer-groups/{groupId}"})
+    ResponseEntity<byte[]> deleteResource(HttpServletRequest request) throws IOException {
         return client.kafkaAdmin(HttpMethod.DELETE, request);
     }
 }
-
