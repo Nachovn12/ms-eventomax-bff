@@ -21,10 +21,10 @@ Sus responsabilidades principales son:
 
 ```mermaid
 flowchart LR
-    SPA["Angular 22 SPA\n(MSAL OAuth2 PKCE)"] -->|HTTPS + Bearer JWT| APIGW["AWS API Gateway\n(JWT Authorizer)"]
+    SPA["Angular 22 SPA<br/>(MSAL OAuth2 PKCE)"] -->|"HTTPS + Bearer JWT"| APIGW["AWS API Gateway<br/>(JWT Authorizer)"]
     APIGW --> BFF["ms-eventomax-bff (:8080 / :8081)"]
 
-    subgraph Red Interna Docker eventomax-net
+    subgraph group1["Red Interna Docker eventomax-net"]
         PROD["ms-eventomax-productions"]
         CAT["ms-eventomax-catalog"]
         NOTIFY["ms-eventomax-notify"]
@@ -33,12 +33,12 @@ flowchart LR
         RADMIN["ms-eventomax-rabbit-admin"]
     end
 
-    BFF -->|/api/productions/**\n/api/organizers/**| PROD
-    BFF -->|/api/catalog/**| CAT
-    BFF -->|/api/productions/{id}/quote-pdf\n/api/productions/{id}/crew-ticket| NOTIFY
-    BFF -->|/api/report/**| REP
-    BFF -->|/api/audit/**| AUD
-    BFF -->|/api/rabbit-admin/**| RADMIN
+    BFF -->|"/api/productions/**<br/>/api/organizers/**"| PROD
+    BFF -->|"/api/catalog/**"| CAT
+    BFF -->|"/api/productions/{id}/quote-pdf<br/>/api/productions/{id}/crew-ticket"| NOTIFY
+    BFF -->|"/api/report/**"| REP
+    BFF -->|"/api/audit/**"| AUD
+    BFF -->|"/api/rabbit-admin/**"| RADMIN
 ```
 
 ---
