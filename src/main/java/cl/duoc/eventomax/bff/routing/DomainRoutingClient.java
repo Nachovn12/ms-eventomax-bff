@@ -33,6 +33,7 @@ public class DomainRoutingClient {
 	private final String auditBaseUrl;
 	private final String notifyBaseUrl;
 	private final String rabbitAdminBaseUrl;
+	private final String kafkaAdminBaseUrl;
 
 	public DomainRoutingClient(RestClient client, URI productionsBaseUrl, URI catalogBaseUrl,
 			URI reportBaseUrl, URI auditBaseUrl) {
@@ -46,6 +47,11 @@ public class DomainRoutingClient {
 
 	public DomainRoutingClient(RestClient client, URI productionsBaseUrl, URI catalogBaseUrl,
 			URI reportBaseUrl, URI auditBaseUrl, URI notifyBaseUrl, URI rabbitAdminBaseUrl) {
+		this(client, productionsBaseUrl, catalogBaseUrl, reportBaseUrl, auditBaseUrl, notifyBaseUrl, rabbitAdminBaseUrl, productionsBaseUrl);
+	}
+
+	public DomainRoutingClient(RestClient client, URI productionsBaseUrl, URI catalogBaseUrl,
+			URI reportBaseUrl, URI auditBaseUrl, URI notifyBaseUrl, URI rabbitAdminBaseUrl, URI kafkaAdminBaseUrl) {
 		this.client = client;
 		this.productionsBaseUrl = baseUrl(productionsBaseUrl);
 		this.catalogBaseUrl = baseUrl(catalogBaseUrl);
@@ -53,6 +59,11 @@ public class DomainRoutingClient {
 		this.auditBaseUrl = baseUrl(auditBaseUrl);
 		this.notifyBaseUrl = baseUrl(notifyBaseUrl);
 		this.rabbitAdminBaseUrl = baseUrl(rabbitAdminBaseUrl);
+		this.kafkaAdminBaseUrl = baseUrl(kafkaAdminBaseUrl);
+	}
+
+	ResponseEntity<byte[]> kafkaAdmin(HttpMethod method, HttpServletRequest request) throws IOException {
+		return forward(this.kafkaAdminBaseUrl, method, request);
 	}
 
 	ResponseEntity<byte[]> rabbitAdmin(HttpMethod method, HttpServletRequest request) throws IOException {

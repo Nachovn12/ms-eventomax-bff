@@ -39,6 +39,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest(properties = "management.endpoints.web.exposure.include=health,info")
@@ -63,6 +64,7 @@ class MsEventomaxBffApplicationTests {
 		registry.add("CATALOG_BASE_URL", CATALOG::baseUrl);
 		registry.add("REPORT_BASE_URL", REPORT::baseUrl);
 		registry.add("AUDIT_BASE_URL", AUDIT::baseUrl);
+		registry.add("KAFKA_ADMIN_BASE_URL", PRODUCTIONS::baseUrl);
 	}
 
 	@BeforeEach
@@ -594,8 +596,29 @@ class MsEventomaxBffApplicationTests {
 	}
 
 	@Test
-	void rejectsUnauthenticatedApiDocs() throws Exception {
-		this.mockMvc.perform(get("/v3/api-docs")).andExpect(status().isUnauthorized());
+	void allowsPublicGetApiDocsAndSwaggerUiWithoutAuthentication() throws Exception {
+		this.mockMvc.perform(get("/v3/api-docs"))
+				.andExpect(status().isOk())
+				.andExpect(content().string(containsString("openapi")))
+				.andExpect(content().string(containsString("EventoMax BFF API")))
+				.andExpect(content().string(containsString("/api/productions")))
+				.andExpect(content().string(containsString("/api/catalog/services")))
+				.andExpect(jsonPath("$.tags.length()").value(9))
+				.andExpect(jsonPath("$.tags[0].name").value("Producciones"))
+				.andExpect(jsonPath("$.tags[8].name").value("Kafka Admin"));
+		this.mockMvc.perform(get("/swagger-ui.html"))
+				.andExpect(status().is3xxRedirection())
+				.andExpect(header().string(HttpHeaders.LOCATION, containsString("swagger-ui/index.html")));
+		this.mockMvc.perform(get("/swagger-ui/index.html"))
+				.andExpect(status().isOk());
+		this.mockMvc.perform(get("/swagger-ui/swagger-initializer.js"))
+				.andExpect(status().isOk())
+				.andExpect(content().string(containsString("swagger-config")));
+	}
+
+	@Test
+	void rejectsWriteMethodsToApiDocsWithoutAuthentication() throws Exception {
+		this.mockMvc.perform(post("/v3/api-docs")).andExpect(status().isUnauthorized());
 	}
 
 	@Test
@@ -1023,6 +1046,61 @@ class MsEventomaxBffApplicationTests {
 		this.mockMvc.perform(get("/api/catalog/reservations/production/42")
 				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
 				.andExpect(status().isForbidden());
+	}
+
+	@Test
+	void adminCanAccessKafkaAdminTopics() throws Exception {
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Admin"));
+		this.mockMvc.perform(get("/api/kafka-admin/topics")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(status().isOk());
+	}
+
+	@Test
+	void adminCanUpdateKafkaAdminTopicConfigsAndPartitions() throws Exception {
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Admin"));
+		this.mockMvc.perform(request(HttpMethod.PUT, "/api/kafka-admin/topics/demo.topic/configs")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+				.header(HttpHeaders.CONTENT_TYPE, "application/json")
+				.content("{\"configs\":{\"retention.ms\":\"86400000\"}}"))
+				.andExpect(status().isOk());
+
+		this.mockMvc.perform(request(HttpMethod.PUT, "/api/kafka-admin/topics/demo.topic/partitions")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+				.header(HttpHeaders.CONTENT_TYPE, "application/json")
+				.content("{\"totalPartitions\":6}"))
+				.andExpect(status().isOk());
+
+		assertThat(PRODUCTIONS.requests()).hasSize(2);
+	}
+
+	@Test
+	void adminCanAccessAndDeleteKafkaConsumerGroups() throws Exception {
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", "Admin"));
+		this.mockMvc.perform(get("/api/kafka-admin/consumer-groups")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(status().isOk());
+
+		this.mockMvc.perform(request(HttpMethod.DELETE, "/api/kafka-admin/consumer-groups/demo-group")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(status().isOk());
+
+		assertThat(PRODUCTIONS.requests()).hasSize(2);
+	}
+
+	@ParameterizedTest
+	@ValueSource(strings = { "Productor", "Organizador", "Auditor" })
+	void nonAdminForbiddenKafkaAdmin(String role) throws Exception {
+		String token = ISSUER.sign(ISSUER.validClaims("access_as_user", role));
+		this.mockMvc.perform(get("/api/kafka-admin/topics")
+				.header(HttpHeaders.AUTHORIZATION, "Bearer " + token))
+				.andExpect(status().isForbidden());
+	}
+
+	@Test
+	void anonymousForbiddenKafkaAdmin() throws Exception {
+		this.mockMvc.perform(get("/api/kafka-admin/topics"))
+				.andExpect(status().isUnauthorized());
 	}
 
 	@Test

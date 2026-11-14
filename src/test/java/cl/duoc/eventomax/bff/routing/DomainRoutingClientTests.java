@@ -49,6 +49,10 @@ class DomainRoutingClientTests {
 			var quoteResponse = client.notifyQuotePdf(42L, new MockHttpServletRequest("GET", "/api/productions/42/quote-pdf"));
 			assertThat(quoteResponse.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
 			assertThat(quoteResponse.getBody()).isNull();
+
+			var kafkaAdminResponse = client.kafkaAdmin(HttpMethod.GET, new MockHttpServletRequest("GET", "/api/kafka-admin/topics"));
+			assertThat(kafkaAdminResponse.getStatusCode()).isEqualTo(HttpStatus.BAD_GATEWAY);
+			assertThat(kafkaAdminResponse.getBody()).isNull();
 		}
 	}
 
