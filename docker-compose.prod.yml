@@ -5,7 +5,7 @@ services:
       context: .
     mem_limit: 640m
     ports:
-      - "8080:8080"
+      - "127.0.0.1:${BFF_HOST_PORT:-8081}:8080"
     restart: unless-stopped
     environment:
       ENTRA_ISSUER_URI: ${ENTRA_ISSUER_URI:?ENTRA_ISSUER_URI is required}
@@ -16,6 +16,7 @@ services:
       AUDIT_BASE_URL: ${AUDIT_BASE_URL:?AUDIT_BASE_URL is required}
       NOTIFY_BASE_URL: ${NOTIFY_BASE_URL:-http://ms-eventomax-notify:8080}
       RABBIT_ADMIN_BASE_URL: ${RABBIT_ADMIN_BASE_URL:-http://ms-eventomax-rabbit-admin:8080}
+      KAFKA_ADMIN_BASE_URL: ${KAFKA_ADMIN_BASE_URL:-http://eventomax-kafka-admin:8088}
       DOWNSTREAM_CONNECT_TIMEOUT: ${DOWNSTREAM_CONNECT_TIMEOUT:-3s}
       DOWNSTREAM_READ_TIMEOUT: ${DOWNSTREAM_READ_TIMEOUT:-10s}
       JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:--XX:InitialRAMPercentage=25.0 -XX:MaxRAMPercentage=65.0 -XX:+ExitOnOutOfMemoryError}
