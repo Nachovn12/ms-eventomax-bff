@@ -39,6 +39,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest(properties = "management.endpoints.web.exposure.include=health,info")
@@ -601,7 +602,10 @@ class MsEventomaxBffApplicationTests {
 				.andExpect(content().string(containsString("openapi")))
 				.andExpect(content().string(containsString("EventoMax BFF API")))
 				.andExpect(content().string(containsString("/api/productions")))
-				.andExpect(content().string(containsString("/api/catalog/services")));
+				.andExpect(content().string(containsString("/api/catalog/services")))
+				.andExpect(jsonPath("$.tags.length()").value(9))
+				.andExpect(jsonPath("$.tags[0].name").value("Producciones"))
+				.andExpect(jsonPath("$.tags[8].name").value("Kafka Admin"));
 		this.mockMvc.perform(get("/swagger-ui.html"))
 				.andExpect(status().is3xxRedirection())
 				.andExpect(header().string(HttpHeaders.LOCATION, containsString("swagger-ui/index.html")));
