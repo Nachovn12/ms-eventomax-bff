@@ -606,7 +606,17 @@ class MsEventomaxBffApplicationTests {
 				.andExpect(status().is3xxRedirection())
 				.andExpect(header().string(HttpHeaders.LOCATION, containsString("swagger-ui/index.html")));
 		this.mockMvc.perform(get("/swagger-ui/index.html"))
-				.andExpect(status().isOk());
+				.andExpect(status().isOk())
+				.andExpect(content().string(containsString("EventoMax BFF")))
+				.andExpect(content().string(containsString("./eventomax-theme.css")));
+		this.mockMvc.perform(get("/swagger-ui/eventomax-theme.css"))
+				.andExpect(status().isOk())
+				.andExpect(content().contentTypeCompatibleWith("text/css"))
+				.andExpect(content().string(containsString("#024ffc")));
+		this.mockMvc.perform(get("/swagger-ui/eventomax-logo.svg"))
+				.andExpect(status().isOk())
+				.andExpect(content().contentTypeCompatibleWith("image/svg+xml"))
+				.andExpect(content().string(containsString("<svg")));
 	}
 
 	@Test

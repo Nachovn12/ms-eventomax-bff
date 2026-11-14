@@ -28,3 +28,15 @@ eventomax:
     kafka-admin-base-url: ${KAFKA_ADMIN_BASE_URL:http://localhost:8088}
     connect-timeout: ${DOWNSTREAM_CONNECT_TIMEOUT:3s}
     read-timeout: ${DOWNSTREAM_READ_TIMEOUT:10s}
+
+springdoc:
+  swagger-ui:
+    document-title: "EventoMax BFF · API Docs"
+    doc-expansion: list
+    operations-sorter: method
+    filter: "true"
+    persist-authorization: true
+    display-request-duration: true
+    try-it-out-enabled: true
+    default-models-expand-depth: -1
+    disable-swagger-default-url: true

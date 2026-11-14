@@ -1,0 +1,248 @@
+/* EventoMax Corporate Theme for Swagger UI */
+
+html, body {
+  background-color: #f8fafc;
+}
+
+.swagger-ui {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: #0f172a;
+}
+
+/* Top Navigation Bar */
+.swagger-ui .topbar {
+  background: linear-gradient(90deg, #021330 0%, #042152 100%);
+  border-bottom: 3px solid #024ffc;
+  padding: 12px 0;
+  box-shadow: 0 2px 10px rgba(2, 19, 48, 0.16);
+}
+
+.swagger-ui .topbar .download-url-wrapper {
+  display: none !important;
+}
+
+.swagger-ui .topbar .topbar-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.swagger-ui .topbar .topbar-wrapper .link {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+}
+
+.swagger-ui .topbar .topbar-wrapper .link img,
+.swagger-ui .topbar .topbar-wrapper .link svg {
+  display: none !important;
+}
+
+.swagger-ui .topbar .topbar-wrapper .link::before {
+  content: "";
+  display: inline-block;
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  background: #ffffff url("./eventomax-logo.svg") no-repeat center / 24px 24px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.25);
+  flex-shrink: 0;
+}
+
+.swagger-ui .topbar .topbar-wrapper .link::after {
+  content: "EventoMax BFF · API Reference";
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.2px;
+}
+
+.swagger-ui .topbar .topbar-wrapper::after {
+  content: "AWS API Gateway · Entra ID JWT";
+  margin-left: auto;
+  color: #bfdbfe;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(147, 197, 253, 0.32);
+  background: rgba(2, 79, 252, 0.18);
+}
+
+/* Main Header Card */
+.swagger-ui .wrapper {
+  max-width: 1200px;
+}
+
+.swagger-ui .information-container.wrapper {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  margin-top: 22px;
+  margin-bottom: 14px;
+  padding: 22px 26px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+.swagger-ui .info {
+  margin: 0;
+}
+
+.swagger-ui .info .title {
+  color: #031c43;
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.4px;
+}
+
+.swagger-ui .info .title small {
+  background: #024ffc;
+  border-radius: 999px;
+  padding: 3px 10px;
+  vertical-align: middle;
+}
+
+.swagger-ui .info .title small.version-stamp {
+  background: #0f172a;
+}
+
+.swagger-ui .info .description p,
+.swagger-ui .info .description li {
+  color: #334155;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.swagger-ui .info table {
+  border-collapse: collapse;
+  margin-top: 12px;
+  font-size: 13px;
+}
+
+.swagger-ui .info table th {
+  background: #f1f5f9;
+  color: #0f172a;
+  font-weight: 600;
+  padding: 8px 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.swagger-ui .info table td {
+  padding: 7px 12px;
+  border: 1px solid #e2e8f0;
+  color: #334155;
+}
+
+/* Server & Authorize Toolbar */
+.swagger-ui .scheme-container {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+  margin: 0 auto 14px;
+  max-width: 1200px;
+  padding: 14px 26px;
+}
+
+.swagger-ui .btn.authorize {
+  color: #024ffc;
+  border-color: #024ffc;
+  border-radius: 8px;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+.swagger-ui .btn.authorize svg {
+  fill: #024ffc;
+}
+
+.swagger-ui .btn.authorize:hover {
+  background: #024ffc;
+  color: #ffffff;
+}
+
+.swagger-ui .btn.authorize:hover svg {
+  fill: #ffffff;
+}
+
+/* Filter Input */
+.swagger-ui .filter-container {
+  background: transparent;
+  margin: 0 0 14px;
+  padding: 0;
+}
+
+.swagger-ui .filter-container .filter .operation-filter-input {
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #ffffff;
+  padding: 10px 14px;
+  font-size: 14px;
+  color: #0f172a;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+
+.swagger-ui .filter-container .filter .operation-filter-input:focus {
+  border-color: #024ffc;
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(2, 79, 252, 0.15);
+}
+
+/* Domain Tag Cards */
+.swagger-ui .opblock-tag-section {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  margin-bottom: 12px;
+  padding: 0 16px;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.03);
+}
+
+.swagger-ui .opblock-tag {
+  border-bottom: none;
+  padding: 14px 4px;
+  margin: 0;
+  color: #031c43;
+  font-weight: 700;
+}
+
+.swagger-ui .opblock-tag small {
+  color: #475569;
+  font-weight: 400;
+  font-size: 13px;
+}
+
+.swagger-ui .opblock-tag-section.is-open > .opblock-tag {
+  border-bottom: 1px solid #f1f5f9;
+  margin-bottom: 10px;
+}
+
+/* Operation Rows */
+.swagger-ui .opblock {
+  border-radius: 8px;
+  margin: 0 0 8px;
+  box-shadow: none;
+}
+
+.swagger-ui .opblock .opblock-summary-method {
+  border-radius: 6px;
+  font-weight: 700;
+  min-width: 72px;
+}
+
+.swagger-ui .opblock .opblock-summary-path {
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.swagger-ui .opblock .opblock-summary-description {
+  color: #475569;
+  font-size: 13px;
+}
+
+/* Hide empty Schemas section when default-models-expand-depth=-1 */
+.swagger-ui section.models {
+  display: none;
+}
