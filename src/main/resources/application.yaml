@@ -31,9 +31,8 @@ eventomax:
 
 springdoc:
   swagger-ui:
-    document-title: "EventoMax BFF · API Docs"
     doc-expansion: list
-    operations-sorter: method
+    operations-sorter: alpha
     filter: "true"
     persist-authorization: true
     display-request-duration: true

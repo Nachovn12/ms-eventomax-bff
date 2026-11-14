@@ -18,18 +18,7 @@ import org.springframework.context.annotation.Configuration;
 		info = @Info(
 				title = "EventoMax BFF API",
 				version = "1.0",
-				description = """
-						Backend for Frontend de **EventoMax** desplegado detrás de AWS API Gateway y Nginx Edge Proxy.
-
-						La interfaz Swagger UI es pública para inspección de contratos OpenAPI; cada endpoint `/api/**` exige **Bearer JWT** de Microsoft Entra ID con scope `access_as_user` y rol autorizado (`Admin`, `Productor`, `Organizador`, `Auditor`). Para ejecutar pruebas en vivo desde **Try it out**, haz clic en **Authorize** e ingresa el Access Token del Portal Web.
-
-						| Dominio | Roles Permitidos | Servicio Downstream |
-						| :--- | :--- | :--- |
-						| **Producciones y Actas** | `Admin`, `Productor`, `Organizador` | `ms-eventomax-productions` / `notify` |
-						| **Catálogo y Equipos** | `Admin` (escritura), `Productor` (lectura) | `ms-eventomax-catalog` |
-						| **Reportes y Auditoría** | `Admin` (`report` y `audit`), `Auditor` (`audit`) | `ms-eventomax-report` / `audit` |
-						| **Admin RabbitMQ y Kafka** | `Admin` | `rabbit-admin` / `kafka-admin` |
-						"""),
+				description = "Backend for Frontend de EventoMax desplegado tras AWS API Gateway. La documentación es pública; los endpoints `/api/**` requieren Bearer JWT de Microsoft Entra ID con scope `access_as_user` y rol autorizado (`Admin`, `Productor`, `Organizador` o `Auditor`). Usa el botón **Authorize** para probar peticiones en vivo."),
 		servers = @Server(url = "/", description = "Servidor actual (AWS API Gateway HTTPS / Local)"),
 		security = @SecurityRequirement(name = "BearerAuth"),
 		externalDocs = @ExternalDocumentation(
