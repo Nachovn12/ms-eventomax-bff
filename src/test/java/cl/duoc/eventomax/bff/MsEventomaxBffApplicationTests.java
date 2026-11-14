@@ -613,6 +613,9 @@ class MsEventomaxBffApplicationTests {
 				.andExpect(status().isOk())
 				.andExpect(content().string(containsString("EventoMax BFF")))
 				.andExpect(content().string(containsString("./eventomax-theme.css")));
+		this.mockMvc.perform(get("/swagger-ui/swagger-initializer.js"))
+				.andExpect(status().isOk())
+				.andExpect(content().string(containsString("swagger-config")));
 		this.mockMvc.perform(get("/swagger-ui/eventomax-theme.css"))
 				.andExpect(status().isOk())
 				.andExpect(content().contentTypeCompatibleWith("text/css"))

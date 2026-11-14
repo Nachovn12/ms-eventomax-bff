@@ -47,19 +47,17 @@ public class SwaggerUiBrandingConfiguration {
 					HttpServletRequest request,
 					Resource resource,
 					ResourceTransformerChain transformerChain) throws IOException {
-				Resource transformed = super.transform(request, resource, transformerChain);
-				String url = transformed.getURL().toString();
-				if (url.endsWith("/swagger-ui/index.html") || url.endsWith("/index.html")) {
+				if ("index.html".equals(resource.getFilename())) {
 					String html;
-					try (InputStream in = transformed.getInputStream()) {
+					try (InputStream in = resource.getInputStream()) {
 						html = new String(in.readAllBytes(), StandardCharsets.UTF_8);
 					}
 					String branded = html
-							.replace("<title>Swagger UI</title>", "<title>EventoMax BFF · API Docs</title>")
+							.replace("<title>Swagger UI</title>", "<title>EventoMax BFF - API Docs</title>")
 							.replace("</head>", THEME_LINKS);
-					return new TransformedResource(transformed, branded.getBytes(StandardCharsets.UTF_8));
+					return new TransformedResource(resource, branded.getBytes(StandardCharsets.UTF_8));
 				}
-				return transformed;
+				return super.transform(request, resource, transformerChain);
 			}
 		};
 	}
