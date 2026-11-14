@@ -595,8 +595,23 @@ class MsEventomaxBffApplicationTests {
 	}
 
 	@Test
-	void rejectsUnauthenticatedApiDocs() throws Exception {
-		this.mockMvc.perform(get("/v3/api-docs")).andExpect(status().isUnauthorized());
+	void allowsPublicGetApiDocsAndSwaggerUiWithoutAuthentication() throws Exception {
+		this.mockMvc.perform(get("/v3/api-docs"))
+				.andExpect(status().isOk())
+				.andExpect(content().string(containsString("openapi")))
+				.andExpect(content().string(containsString("EventoMax BFF API")))
+				.andExpect(content().string(containsString("/api/productions")))
+				.andExpect(content().string(containsString("/api/catalog/services")));
+		this.mockMvc.perform(get("/swagger-ui.html"))
+				.andExpect(status().is3xxRedirection())
+				.andExpect(header().string(HttpHeaders.LOCATION, containsString("swagger-ui/index.html")));
+		this.mockMvc.perform(get("/swagger-ui/index.html"))
+				.andExpect(status().isOk());
+	}
+
+	@Test
+	void rejectsWriteMethodsToApiDocsWithoutAuthentication() throws Exception {
+		this.mockMvc.perform(post("/v3/api-docs")).andExpect(status().isUnauthorized());
 	}
 
 	@Test

@@ -2,6 +2,8 @@ package cl.duoc.eventomax.bff.routing;
 
 import java.io.IOException;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
@@ -13,6 +15,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/catalog/reservations")
+@Tag(name = "Catálogo - Reservas", description = "Consulta de reservas de inventario asociadas a producciones")
 public class CatalogReservationsRoutingController {
 
 	private final DomainRoutingClient client;
@@ -22,6 +25,7 @@ public class CatalogReservationsRoutingController {
 	}
 
 	@GetMapping("/production/{productionId}")
+	@Operation(summary = "Listar reservas de equipamiento por producción")
 	ResponseEntity<byte[]> getByProduction(
 			@PathVariable("productionId") Long productionId,
 			Authentication authentication,

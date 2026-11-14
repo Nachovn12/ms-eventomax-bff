@@ -47,6 +47,9 @@ public class SecurityConfiguration {
 				.authorizeHttpRequests(authorize -> authorize
 						.requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 						.requestMatchers(HttpMethod.GET, "/actuator/health", "/actuator/info").permitAll()
+						.requestMatchers(HttpMethod.GET, "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs",
+								"/v3/api-docs/**")
+						.permitAll()
 						.requestMatchers("/api/rabbit-admin/**").access(scopeAndAnyRole(ADMIN))
 						.requestMatchers("/api/kafka-admin/**").access(scopeAndAnyRole(ADMIN))
 						.requestMatchers(HttpMethod.GET, "/api/productions/{id}/crew-ticket")

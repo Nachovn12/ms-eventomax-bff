@@ -2,6 +2,8 @@ package cl.duoc.eventomax.bff.routing;
 
 import java.io.IOException;
 
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
@@ -11,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/report")
+@Tag(name = "Reportes", description = "KPIs operativos y ranking de servicios (proyección Kafka)")
 public class ReportRoutingController {
 
 	private final DomainRoutingClient client;
@@ -20,11 +23,13 @@ public class ReportRoutingController {
 	}
 
 	@GetMapping("/kpis")
+	@Operation(summary = "Obtener KPIs consolidados de producciones (rol Admin)")
 	ResponseEntity<byte[]> kpis(HttpServletRequest request) throws IOException {
 		return this.client.report(HttpMethod.GET, request);
 	}
 
 	@GetMapping("/top-services")
+	@Operation(summary = "Obtener ranking de servicios más contratados (rol Admin)")
 	ResponseEntity<byte[]> topServices(HttpServletRequest request) throws IOException {
 		return this.client.report(HttpMethod.GET, request);
 	}
