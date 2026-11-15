@@ -50,6 +50,7 @@ public class SecurityConfiguration {
 						.requestMatchers(HttpMethod.GET, "/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs",
 								"/v3/api-docs/**")
 						.permitAll()
+						.requestMatchers("/error").permitAll()
 						.requestMatchers("/api/rabbit-admin/**").access(scopeAndAnyRole(ADMIN))
 						.requestMatchers("/api/kafka-admin/**").access(scopeAndAnyRole(ADMIN))
 						.requestMatchers(HttpMethod.GET, "/api/productions/{id}/crew-ticket")
