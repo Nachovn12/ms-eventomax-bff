@@ -27,4 +27,10 @@ public class AuditRoutingController {
 	ResponseEntity<byte[]> timeline(HttpServletRequest request) throws IOException {
 		return this.client.audit(HttpMethod.GET, request);
 	}
+
+	@GetMapping("/timeline/latest")
+	@Operation(summary = "Consultar último estado compactado por producción")
+	ResponseEntity<byte[]> latestSnapshots(HttpServletRequest request) throws IOException {
+		return this.client.audit(HttpMethod.GET, request);
+	}
 }

@@ -19,6 +19,7 @@ services:
       KAFKA_ADMIN_BASE_URL: ${KAFKA_ADMIN_BASE_URL:-http://eventomax-kafka-admin:8088}
       DOWNSTREAM_CONNECT_TIMEOUT: ${DOWNSTREAM_CONNECT_TIMEOUT:-3s}
       DOWNSTREAM_READ_TIMEOUT: ${DOWNSTREAM_READ_TIMEOUT:-10s}
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
       JAVA_TOOL_OPTIONS: ${JAVA_TOOL_OPTIONS:--XX:InitialRAMPercentage=25.0 -XX:MaxRAMPercentage=65.0 -XX:+ExitOnOutOfMemoryError}
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://localhost:8080/actuator/health"]
