@@ -25,6 +25,15 @@ public class OrganizersRoutingController {
 		this.client = client;
 	}
 
+	@GetMapping("/eligible")
+	@Operation(summary = "Listar organizadores elegibles", description = "Consulta paginada de organizadores elegibles (Entra ID y clientes externos registrados) para el selector de nueva producción. Restringido a Admin y Productor.")
+	@Parameter(name = "q", in = ParameterIn.QUERY, required = false, description = "Filtro de búsqueda por nombre")
+	@Parameter(name = "page", in = ParameterIn.QUERY, required = false, description = "Número de página (base 0)")
+	@Parameter(name = "size", in = ParameterIn.QUERY, required = false, description = "Tamaño de página (acotado por backend)")
+	ResponseEntity<byte[]> listEligible(HttpServletRequest request) throws IOException {
+		return this.client.productions(HttpMethod.GET, request);
+	}
+
 	@GetMapping("/{organizerId}/contact")
 	@Operation(summary = "Obtener contacto corporativo del organizador")
 	@Parameter(name = "organizerId", in = ParameterIn.PATH, required = true, description = "Identificador del organizador")
