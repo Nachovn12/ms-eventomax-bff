@@ -8,6 +8,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -32,5 +33,11 @@ public class AuditRoutingController {
 	@Operation(summary = "Consultar último estado compactado por producción")
 	ResponseEntity<byte[]> latestSnapshots(HttpServletRequest request) throws IOException {
 		return this.client.audit(HttpMethod.GET, request);
+	}
+
+	@PostMapping("/actor-aliases/me")
+	@Operation(summary = "Registrar equivalencia verificada de identidad propia (sub -> tid:oid)")
+	ResponseEntity<byte[]> registerOwnActorAlias(HttpServletRequest request) throws IOException {
+		return this.client.audit(HttpMethod.POST, request);
 	}
 }

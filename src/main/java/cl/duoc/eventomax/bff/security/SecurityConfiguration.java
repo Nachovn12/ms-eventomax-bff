@@ -82,6 +82,8 @@ public class SecurityConfiguration {
 						.requestMatchers(HttpMethod.GET, "/api/report/**")
 								.access(scopeAndAnyRole(ADMIN))
 						.requestMatchers("/api/report/**").denyAll()
+						.requestMatchers(HttpMethod.POST, "/api/audit/actor-aliases/me")
+								.access(scopeAndAnyRole(ADMIN, PRODUCER, ORGANIZER, AUDITOR))
 						.requestMatchers(HttpMethod.GET, "/api/audit/**")
 								.access(scopeAndAnyRole(ADMIN, AUDITOR))
 						.requestMatchers("/api/audit/**").denyAll()
